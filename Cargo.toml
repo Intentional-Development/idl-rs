@@ -6,6 +6,7 @@ members = [
     "idl-emitters",
     "idl-extractors",
     "idl-ffi",
+    "idl-graph",
 ]
 
 [workspace.package]

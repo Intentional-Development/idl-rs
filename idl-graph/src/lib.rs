@@ -13,6 +13,8 @@
 //! - **P0.6** — AI Kernel decision frozen in [`kind`].
 //! - **P0.7** — semantic loss reporting in [`loss`].
 
+pub mod doc;
+pub mod drift;
 pub mod edge;
 pub mod graph;
 pub mod kind;
@@ -21,6 +23,12 @@ pub mod node;
 pub mod provenance;
 pub mod state;
 pub mod validate;
+
+pub use doc::{ConfidenceDoc, EdgeDoc, GraphDoc, NodeDoc, RangeDoc, SourceAnchorDoc};
+pub use drift::{
+    diff_against_source, diff_graphs, AnchorEntry, AnchorReport, AnchorVerdict, DriftEntry,
+    DriftEvent, DriftReport, DriftSeverity, PropChange,
+};
 
 pub use edge::{Edge, EdgeId};
 pub use graph::Graph;

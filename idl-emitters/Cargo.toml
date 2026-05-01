@@ -10,5 +10,11 @@ description = "IDL code emitters for target languages (Node, Go, Python, Rust)"
 
 [dependencies]
 idl-core = { path = "../idl-core" }
+idl-graph = { path = "../idl-graph" }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

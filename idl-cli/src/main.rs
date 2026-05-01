@@ -108,26 +108,26 @@ enum Commands {
         language: Option<String>,
     },
 
-    /// Emit code from IDL specification (legacy).
+    /// Emit code from an extracted graph (P1.4 codegen).
+    ///
+    /// `idl emit <target> <graph.json> --out <dir>`
     Emit {
-        #[arg(short, long)]
-        idl_dir: PathBuf,
-        #[arg(short, long)]
-        output: PathBuf,
-        #[arg(short, long)]
+        /// Target language: `rust`, `typescript`, `openapi`.
         target: String,
+        /// Path to the schema-shaped graph JSON file.
+        graph: PathBuf,
+        /// Output directory.
+        #[arg(long)]
+        out: PathBuf,
     },
 
-    /// Compare IDL spec with code and detect drift (legacy).
+    /// Detect drift (P1.7).
+    ///
+    /// `idl drift graph <baseline> <current>`  — graph-vs-graph
+    /// `idl drift code  <graph> --source <p>`  — graph-vs-code
     Drift {
-        #[arg(short, long)]
-        idl_dir: PathBuf,
-        #[arg(short, long)]
-        generated: PathBuf,
-        #[arg(short, long)]
-        compare: String,
-        #[arg(short, long)]
-        language: String,
+        #[command(subcommand)]
+        action: DriftAction,
     },
 
     /// Parse IDL files and dump AST (legacy).
@@ -136,6 +136,29 @@ enum Commands {
         path: PathBuf,
         #[arg(short, long)]
         json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum DriftAction {
+    /// Compare two graph JSON files.
+    Graph {
+        baseline: PathBuf,
+        current: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        markdown: bool,
+    },
+    /// Re-anchor a graph against a source code root.
+    Code {
+        graph: PathBuf,
+        #[arg(long)]
+        source: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        markdown: bool,
     },
 }
 
@@ -216,10 +239,29 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             ChangeAction::Validate { id } => change::stub("validate", &id),
         },
         Commands::Extract { source, output, language } => extract::run(source, output, language),
-        Commands::Emit { idl_dir, output, target } => emit::run(idl_dir, output, target),
-        Commands::Drift { idl_dir, generated, compare, language } => {
-            drift::run(idl_dir, generated, compare, language)
-        }
+        Commands::Emit { target, graph, out } => emit::run(target, graph, out),
+        Commands::Drift { action } => match action {
+            DriftAction::Graph { baseline, current, json, markdown } => {
+                let fmt = if json {
+                    drift::OutputFormat::Json
+                } else if markdown {
+                    drift::OutputFormat::Markdown
+                } else {
+                    drift::OutputFormat::Human
+                };
+                drift::run_graph(baseline, current, fmt)
+            }
+            DriftAction::Code { graph, source, json, markdown } => {
+                let fmt = if json {
+                    drift::OutputFormat::Json
+                } else if markdown {
+                    drift::OutputFormat::Markdown
+                } else {
+                    drift::OutputFormat::Human
+                };
+                drift::run_code(graph, source, fmt)
+            }
+        },
         Commands::Parse { path, json } => parse::run(path, json),
     }
 }

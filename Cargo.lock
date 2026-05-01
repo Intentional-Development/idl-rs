@@ -529,6 +529,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "idl-core",
+ "idl-graph",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 

@@ -1,31 +1,38 @@
-//! `idl emit` — legacy passthrough preserved from prior CLI version.
+//! `idl emit <target> <graph.json> --out <dir>` — graph-driven codegen
+//! (Wave 8 R3 / P1.4). Targets: `rust`, `typescript`, `openapi`.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anyhow::{Context, Result};
-use tracing::{info, warn};
+use anyhow::{anyhow, Context, Result};
+use idl_emitters::{GraphEmitter, OpenApiEmitter, RustEmitter, TypeScriptEmitter};
+use idl_graph::GraphDoc;
 
-pub fn run(idl_dir: PathBuf, output: PathBuf, target: String) -> Result<ExitCode> {
-    info!(
-        "Emitting {} code from {} to {}",
-        target,
-        idl_dir.display(),
-        output.display()
-    );
+pub fn run(target: String, graph_path: PathBuf, out: PathBuf) -> Result<ExitCode> {
+    let graph = GraphDoc::load(&graph_path)
+        .with_context(|| format!("load graph {}", graph_path.display()))?;
 
-    let idl_files = crate::commands::parse::find_idl_files(&idl_dir)?;
-    info!("Found {} IDL files", idl_files.len());
-
-    for file in &idl_files {
-        let content = std::fs::read_to_string(file)
-            .with_context(|| format!("Failed to read {}", file.display()))?;
-        match idl_core::parse_idl(&content) {
-            Ok(doc) => info!("✓ Parsed {}: {} blocks", file.display(), doc.blocks.len()),
-            Err(e) => warn!("✗ Failed to parse {}: {}", file.display(), e),
+    let report = match target.as_str() {
+        "rust" => RustEmitter.emit(&graph)?,
+        "typescript" | "ts" => TypeScriptEmitter.emit(&graph)?,
+        "openapi" => OpenApiEmitter.emit(&graph)?,
+        other => {
+            return Err(anyhow!(
+                "unknown emit target {other:?}; supported: rust, typescript, openapi"
+            ));
         }
-    }
+    };
 
-    warn!("⚠️  Emit command not yet implemented (port pending in Wave 8).");
+    std::fs::create_dir_all(&out)
+        .with_context(|| format!("create out dir {}", out.display()))?;
+    report.write(&out)?;
+
+    println!(
+        "idl emit {target}: wrote {} files ({} LOC) covering {} nodes → {}",
+        report.file_count(),
+        report.total_loc(),
+        report.nodes_emitted,
+        out.display()
+    );
     Ok(ExitCode::from(0))
 }

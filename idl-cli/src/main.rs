@@ -40,7 +40,8 @@ enum Commands {
     /// Parse and validate an IDL project (kernel-aware graph + constraints + loss report).
     #[command(long_about = "Parse the IDL file at `path` (default: intent/project.idl, then project.idl), \n\
         lift it into the kernel-aware semantic graph, and run the default 6 constraints.\n\
-        Reports semantic-loss coverage (P0.7). Exit code: 0 ok, 1 errors, 2 warnings (non-strict).")]
+        Reports semantic-loss coverage (P0.7). Exit code: 0 ok, 1 errors, 2 warnings (non-strict).\n\
+        With --anchors, validates source_anchors against the filesystem under --source.")]
     Validate {
         /// IDL file (default: intent/project.idl, then project.idl).
         path: Option<PathBuf>,
@@ -52,6 +53,15 @@ enum Commands {
         /// Emit the report as JSON instead of human-readable text.
         #[arg(long)]
         json: bool,
+
+        /// Run anchor validation instead of IDL validation. The path argument
+        /// is treated as a graph JSON file. Requires --source.
+        #[arg(long, requires = "source")]
+        anchors: bool,
+
+        /// Source root (workspace) for anchor resolution. Used with --anchors.
+        #[arg(long)]
+        source: Option<PathBuf>,
     },
 
     /// Validate a JSON graph file against `semantic-graph.schema.json` (v0.1.0).
@@ -106,6 +116,18 @@ enum Commands {
         /// Source language hint.
         #[arg(short, long)]
         language: Option<String>,
+
+        /// Rewrite `source_anchors[].uri` prefixes in a graph file. Pass two
+        /// values: <old-prefix> <new-prefix>. The graph path is taken from
+        /// --output (or --source if --output absent).
+        #[arg(long, num_args = 2, value_names = ["OLD_PREFIX", "NEW_PREFIX"])]
+        rewrite_anchors: Option<Vec<String>>,
+
+        /// When rewriting, edit the input file in-place (preserving original
+        /// to a sibling `*.legacy.json`). Default writes a sibling
+        /// `*.rewritten.json` and leaves the input alone.
+        #[arg(long)]
+        in_place: bool,
     },
 
     /// Emit code from an extracted graph (P1.4 codegen).
@@ -220,7 +242,19 @@ fn init_tracing(verbose: bool) {
 
 fn dispatch(cmd: Commands) -> Result<ExitCode> {
     match cmd {
-        Commands::Validate { path, strict, json } => validate::run(path, strict, json),
+        Commands::Validate { path, strict, json, anchors, source } => {
+            if anchors {
+                let graph = path.ok_or_else(|| {
+                    anyhow::anyhow!("--anchors requires a graph JSON path argument")
+                })?;
+                let src = source.ok_or_else(|| {
+                    anyhow::anyhow!("--anchors requires --source <root>")
+                })?;
+                commands::validate_anchors::run(graph, src, json)
+            } else {
+                validate::run(path, strict, json)
+            }
+        }
         Commands::ValidateSchema { graph, schema, json } => {
             validate_schema::run(graph, schema, json)
         }
@@ -238,7 +272,9 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             ChangeAction::Diff { id } => change::stub("diff", &id),
             ChangeAction::Validate { id } => change::stub("validate", &id),
         },
-        Commands::Extract { source, output, language } => extract::run(source, output, language),
+        Commands::Extract { source, output, language, rewrite_anchors, in_place } => {
+            extract::run(source, output, language, rewrite_anchors, in_place)
+        }
         Commands::Emit { target, graph, out } => emit::run(target, graph, out),
         Commands::Drift { action } => match action {
             DriftAction::Graph { baseline, current, json, markdown } => {

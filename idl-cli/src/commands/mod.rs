@@ -8,4 +8,5 @@ pub mod extract;
 pub mod init;
 pub mod parse;
 pub mod validate;
+pub mod validate_anchors;
 pub mod validate_schema;

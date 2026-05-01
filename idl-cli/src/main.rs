@@ -212,8 +212,15 @@ enum DriftAction {
     /// Re-anchor a graph against a source code root.
     Code {
         graph: PathBuf,
+        /// Source root for anchor resolution. May be specified multiple times.
+        ///
+        /// Forms:
+        /// * `--source <path>` — fallback root for `repo://*` URIs and bare
+        ///   relative paths.
+        /// * `--source <corpus>=<path>` — named corpus mapping. Any
+        ///   `repo://<corpus>/...` URI is routed under `<path>`.
         #[arg(long)]
-        source: PathBuf,
+        source: Vec<PathBuf>,
         #[arg(long)]
         json: bool,
         #[arg(long)]

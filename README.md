@@ -45,6 +45,50 @@ idl emit --idl-dir ./idl --output ./generated --target node
 idl drift --idl-dir ./idl --generated ./generated --compare emit --language node
 ```
 
+### `idl drift code` — Source/IDL drift sweep (Wave 10)
+
+```bash
+idl drift code <graph.json> \
+    [--source <root>] \
+    [--source <name>=<root>] ... \
+    [--markdown | --json]
+```
+
+**`--source` forms** (repeatable):
+
+- `--source ./app` — bare path; becomes the default root for `repo://` URIs
+  with no corpus prefix.
+- `--source name=./path` — named corpus root. URIs of the form
+  `repo://name/...` resolve under `<path>/...`. Multiple `--source name=...`
+  flags map multiple corpora in one invocation (e.g. an app tree plus the
+  `IDL/` spec tree).
+
+**Anchor verdicts** (lowercase in markdown/human output):
+
+| Verdict       | Meaning                                                |
+|---------------|--------------------------------------------------------|
+| `aligned`     | URI resolves and the line range is in bounds.          |
+| `missing`     | Source file does not exist.                            |
+| `shifted`     | URI resolves but the anchor's line range is invalid.   |
+| `new-in-code` | (Reserved) Code feature with no matching IDL anchor.   |
+
+Directory anchors (URIs that resolve to a directory) report `aligned` when
+the directory exists; line ranges are ignored. End-line equal to
+`file_line_count + 1` is silently clamped (treats trailing-newline EOFs as
+in-bounds).
+
+**Exit codes:**
+
+| Code | Meaning                                              |
+|------|------------------------------------------------------|
+| `0`  | All anchors `aligned`.                               |
+| `1`  | One or more anchors `missing` (file not found).      |
+| `2`  | One or more anchors `new-in-code`.                   |
+| `3`  | One or more anchors `shifted` (line range invalid).  |
+
+When multiple non-zero categories are present, the highest-priority code is
+returned in the order: `missing` (1) > `new-in-code` (2) > `shifted` (3).
+
 ---
 
 ## Parser Status (Wave 7)

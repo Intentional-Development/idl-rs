@@ -26,7 +26,7 @@ pub mod validate;
 
 pub use doc::{ConfidenceDoc, EdgeDoc, GraphDoc, NodeDoc, RangeDoc, SourceAnchorDoc};
 pub use drift::{
-    diff_against_source, diff_graphs, AnchorEntry, AnchorReport, AnchorVerdict, DriftEntry,
+    diff_against_source, diff_against_sources, diff_graphs, AnchorEntry, AnchorReport, AnchorVerdict, DriftEntry,
     DriftEvent, DriftReport, DriftSeverity, PropChange,
 };
 

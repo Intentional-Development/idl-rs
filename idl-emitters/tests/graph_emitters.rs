@@ -106,3 +106,96 @@ fn openapi_emitter_emits_yaml() {
     assert!(y.contains("/articles:"));
     assert!(y.contains("User:"));
 }
+
+/// Wave 10 Bug 1 — multiple operations on the same path must emit a single
+/// path key with all methods nested underneath. The previous implementation
+/// emitted one `<path>:` block per op which YAML silently de-duped on parse.
+#[test]
+fn openapi_emitter_groups_methods_under_one_path_key() {
+    // Two ops sharing the same path `/articles`.
+    let nodes = vec![
+        node(
+            "operation:list-articles",
+            "operation",
+            json!({"name":"list-articles","inputs":[],"outputs":[]}),
+        ),
+        node(
+            "operation:create-article",
+            "operation",
+            json!({
+                "name":"create-article",
+                "inputs":[{"name":"title","type":"string"}],
+                "outputs":[]
+            }),
+        ),
+        node(
+            "api:rest",
+            "api",
+            json!({
+                "name":"rest",
+                "endpoints":[
+                    {"method":"GET","path":"/articles","operation_id":"operation:list-articles"},
+                    {"method":"POST","path":"/articles","operation_id":"operation:create-article"}
+                ]
+            }),
+        ),
+    ];
+    let g = GraphDoc { version: "0.1.0".into(), metadata: json!({"project":"x"}),
+        nodes, edges: vec![], extensions: None };
+    let r = OpenApiEmitter.emit(&g).unwrap();
+    let y = &r.files[0].content;
+    // Exactly ONE `/articles:` path key.
+    let occurrences = y.matches("\n  /articles:\n").count();
+    assert_eq!(occurrences, 1, "expected one /articles path key, got:\n{y}");
+    // Both methods present.
+    assert!(y.contains("    get:"), "missing get under /articles");
+    assert!(y.contains("    post:"), "missing post under /articles");
+    // YAML is parseable and round-trips both ops on the same path.
+    let parsed: serde_yaml::Value = serde_yaml::from_str(y).expect("yaml parses");
+    let paths = parsed.get("paths").unwrap();
+    let articles = paths.get("/articles").expect("/articles path present");
+    assert!(articles.get("get").is_some());
+    assert!(articles.get("post").is_some());
+}
+
+/// Wave 10 Bug 2 — request bodies must be referenced via
+/// `$ref: '#/components/schemas/Body<OpName>'` and the corresponding schema
+/// emitted under `components.schemas`, not inlined per-operation.
+#[test]
+fn openapi_emitter_emits_components_schemas_with_refs() {
+    let g = fixture();
+    let r = OpenApiEmitter.emit(&g).unwrap();
+    let y = &r.files[0].content;
+
+    // Entity schemas appear under components.schemas.
+    let parsed: serde_yaml::Value = serde_yaml::from_str(y).expect("yaml parses");
+    let schemas = parsed
+        .get("components")
+        .and_then(|c| c.get("schemas"))
+        .expect("components.schemas present");
+    assert!(schemas.get("User").is_some(), "User schema missing");
+    assert!(schemas.get("Article").is_some(), "Article schema missing");
+
+    // Body stub schema for create-article exists.
+    assert!(
+        schemas.get("BodyCreateArticle").is_some(),
+        "BodyCreateArticle stub missing in:\n{y}"
+    );
+
+    // The create-article operation references the body schema instead of
+    // inlining `type: object\nproperties:` under requestBody.
+    let post = parsed
+        .get("paths")
+        .and_then(|p| p.get("/articles"))
+        .and_then(|p| p.get("post"))
+        .expect("post /articles");
+    let schema_ref = post
+        .get("requestBody")
+        .and_then(|b| b.get("content"))
+        .and_then(|c| c.get("application/json"))
+        .and_then(|j| j.get("schema"))
+        .and_then(|s| s.get("$ref"))
+        .and_then(|v| v.as_str())
+        .expect("requestBody schema $ref");
+    assert_eq!(schema_ref, "#/components/schemas/BodyCreateArticle");
+}

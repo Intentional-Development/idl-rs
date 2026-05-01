@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::doc::{EdgeDoc, GraphDoc, NodeDoc};
+use crate::doc::{EdgeDoc, GraphDoc, NodeDoc, RangeDoc, SourceAnchorDoc};
 
 /// Severity for a single drift event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -384,6 +384,24 @@ pub enum AnchorVerdict {
     NewInCode,
 }
 
+impl AnchorVerdict {
+    /// Lowercase, hyphenated wire form (matches JSON serialization).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AnchorVerdict::Aligned => "aligned",
+            AnchorVerdict::Shifted => "shifted",
+            AnchorVerdict::Missing => "missing",
+            AnchorVerdict::NewInCode => "new-in-code",
+        }
+    }
+}
+
+impl std::fmt::Display for AnchorVerdict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Per-node anchor verdict.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnchorEntry {
@@ -445,7 +463,7 @@ impl AnchorReport {
         s.push_str("| node | kind | verdict | uri |\n|---|---|---|---|\n");
         for e in &self.entries {
             s.push_str(&format!(
-                "| `{}` | `{}` | `{:?}` | `{}` |\n",
+                "| `{}` | `{}` | `{}` | `{}` |\n",
                 e.node_id, e.node_kind, e.verdict, e.uri
             ));
         }
@@ -461,7 +479,7 @@ impl AnchorReport {
         );
         for e in &self.entries {
             s.push_str(&format!(
-                "  [{:?}] {} ({})\n",
+                "  [{}] {} ({})\n",
                 e.verdict, e.node_id, e.node_kind
             ));
         }
@@ -471,14 +489,33 @@ impl AnchorReport {
 
 /// Compute code-anchor drift: walk every node with `source_anchors`, try to
 /// resolve each anchor against `source_root`, and classify.
+///
+/// Single-root convenience wrapper around [`diff_against_sources`].
 pub fn diff_against_source(
     graph_path: impl Into<String>,
     graph: &GraphDoc,
     source_root: &std::path::Path,
 ) -> AnchorReport {
+    diff_against_sources(graph_path, graph, &[(String::new(), source_root.to_path_buf())])
+}
+
+/// Multi-root variant. `mappings` is a list of `(corpus_name, root_path)`
+/// entries. When a `repo://<corpus>/...` URI's first segment matches a known
+/// corpus name, the URI is routed under that corpus's root. An entry with an
+/// empty corpus name acts as the default root (used when no corpus matches).
+pub fn diff_against_sources(
+    graph_path: impl Into<String>,
+    graph: &GraphDoc,
+    mappings: &[(String, std::path::PathBuf)],
+) -> AnchorReport {
+    let source_root = mappings
+        .iter()
+        .map(|(c, p)| if c.is_empty() { p.display().to_string() } else { format!("{c}={}", p.display()) })
+        .collect::<Vec<_>>()
+        .join(",");
     let mut report = AnchorReport {
         graph_path: graph_path.into(),
-        source_root: source_root.display().to_string(),
+        source_root,
         ..Default::default()
     };
     for node in &graph.nodes {
@@ -486,15 +523,31 @@ pub fn diff_against_source(
             continue;
         }
         let anchor = &node.source_anchors[0];
-        let local = resolve_uri(source_root, &anchor.uri);
+        let local = resolve_uri_multi(mappings, &anchor.uri);
         let (verdict, resolved_path, note) = match local {
             Some(p) if p.exists() => {
-                if let Some(r) = &anchor.range {
+                // Bug A: directory anchors are aligned if the directory exists.
+                if p.is_dir() {
+                    (AnchorVerdict::Aligned, Some(p.display().to_string()), None)
+                } else if let Some(r) = &anchor.range {
                     let lines = std::fs::read_to_string(&p)
                         .map(|t| t.lines().count() as u64)
                         .unwrap_or(0);
+                    let start = r.start_line.unwrap_or(0);
                     let end = r.end_line.unwrap_or(0);
-                    if end > 0 && end > lines {
+                    // Bug C: clamp `end_line == lines + 1` silently for whole-file
+                    // anchors. Only flag when start_line > line_count, or when end
+                    // overshoots by >1 (genuine overrun).
+                    if start > 0 && start > lines {
+                        (
+                            AnchorVerdict::Shifted,
+                            Some(p.display().to_string()),
+                            Some(format!(
+                                "anchor start_line {} exceeds file length {}",
+                                start, lines
+                            )),
+                        )
+                    } else if end > lines + 1 {
                         (
                             AnchorVerdict::Shifted,
                             Some(p.display().to_string()),
@@ -518,7 +571,7 @@ pub fn diff_against_source(
             None => (
                 AnchorVerdict::Missing,
                 None,
-                Some("uri scheme not resolvable to source_root".into()),
+                Some("uri scheme not resolvable to any source root".into()),
             ),
         };
         report.entries.push(AnchorEntry {
@@ -535,18 +588,35 @@ pub fn diff_against_source(
 
 /// Map a graph URI to a local path under `source_root`. Supports
 /// `repo://<corpus>/<rel>`, `file://<abs>`, and bare relative paths.
+#[allow(dead_code)]
 fn resolve_uri(source_root: &std::path::Path, uri: &str) -> Option<std::path::PathBuf> {
+    resolve_uri_multi(&[(String::new(), source_root.to_path_buf())], uri)
+}
+
+/// Multi-root URI resolver (Wave 10 — bug B). Looks up `repo://<corpus>/...`
+/// against the provided mappings; falls back to the default (empty-name) root.
+fn resolve_uri_multi(
+    mappings: &[(String, std::path::PathBuf)],
+    uri: &str,
+) -> Option<std::path::PathBuf> {
     if let Some(rest) = uri.strip_prefix("repo://") {
-        // repo://<corpus>/<rel>... — try `<root>/<rel>` first, then `<root>/<corpus>/<rel>`.
         let mut parts = rest.splitn(2, '/');
         let corpus = parts.next().unwrap_or("");
         let rel = parts.next().unwrap_or("");
-        let cand1 = source_root.join(rel);
-        if cand1.exists() {
-            return Some(cand1);
+        // 1) explicit corpus mapping wins.
+        if let Some((_, root)) = mappings.iter().find(|(c, _)| c == corpus) {
+            return Some(root.join(rel));
         }
-        let cand2 = source_root.join(corpus).join(rel);
-        return Some(cand2);
+        // 2) fall back to the default ("") root, trying both `<root>/<rel>`
+        //    and `<root>/<corpus>/<rel>` for backwards compat.
+        if let Some((_, root)) = mappings.iter().find(|(c, _)| c.is_empty()) {
+            let cand1 = root.join(rel);
+            if cand1.exists() {
+                return Some(cand1);
+            }
+            return Some(root.join(corpus).join(rel));
+        }
+        return None;
     }
     if let Some(rest) = uri.strip_prefix("file://") {
         return Some(std::path::PathBuf::from(rest));
@@ -554,7 +624,10 @@ fn resolve_uri(source_root: &std::path::Path, uri: &str) -> Option<std::path::Pa
     if uri.contains("://") {
         return None;
     }
-    Some(source_root.join(uri))
+    if let Some((_, root)) = mappings.iter().find(|(c, _)| c.is_empty()) {
+        return Some(root.join(uri));
+    }
+    mappings.first().map(|(_, root)| root.join(uri))
 }
 
 #[cfg(test)]
@@ -638,5 +711,126 @@ mod tests {
         let r = diff_graphs("a", &a, "a", &a);
         assert!(r.is_clean());
         assert_eq!(r.exit_code(), 0);
+    }
+
+    // ----- Wave 10 drift-tool fixes ---------------------------------------
+
+    fn anchored_node(id: &str, kind: &str, uri: &str, range: Option<RangeDoc>) -> NodeDoc {
+        let mut node = n(id, kind, "accepted");
+        node.source_anchors.push(SourceAnchorDoc {
+            uri: uri.into(),
+            range,
+            hash: None,
+        });
+        node
+    }
+
+    /// Bug A — directory anchors must report `aligned` when the directory
+    /// exists, not `shifted` (length-0).
+    #[test]
+    fn directory_anchor_is_aligned_not_shifted() {
+        let tmp = tempdir_in_target("drift-dir-anchor");
+        let dir = tmp.join("subdir");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let g = doc_with(
+            vec![anchored_node("scope:x", "scope", "subdir", None)],
+            vec![],
+        );
+        let r = diff_against_source("g", &g, &tmp);
+        assert_eq!(r.entries.len(), 1);
+        assert_eq!(r.entries[0].verdict, AnchorVerdict::Aligned, "{:?}", r.entries[0]);
+        assert_eq!(r.shifted(), 0);
+    }
+
+    /// Bug C — `end_line == file_line_count + 1` (whole-file anchor) must be
+    /// silently clamped, not flagged as shifted. `start_line > line_count` is
+    /// still shifted.
+    #[test]
+    fn end_line_off_by_one_is_aligned() {
+        let tmp = tempdir_in_target("drift-eof");
+        let file = tmp.join("x.txt");
+        std::fs::write(&file, "a\nb\nc\n").unwrap(); // 3 lines per `lines().count()`.
+
+        let off_by_one = anchored_node(
+            "entity:x",
+            "entity",
+            "x.txt",
+            Some(RangeDoc { start_line: Some(1), end_line: Some(4), ..Default::default() }),
+        );
+        let r = diff_against_source("g", &doc_with(vec![off_by_one], vec![]), &tmp);
+        assert_eq!(r.entries[0].verdict, AnchorVerdict::Aligned, "off-by-one EOF should align");
+
+        let real_overrun = anchored_node(
+            "entity:y",
+            "entity",
+            "x.txt",
+            Some(RangeDoc { start_line: Some(1), end_line: Some(99), ..Default::default() }),
+        );
+        let r = diff_against_source("g", &doc_with(vec![real_overrun], vec![]), &tmp);
+        assert_eq!(r.entries[0].verdict, AnchorVerdict::Shifted, ">+1 overrun stays shifted");
+    }
+
+    /// Bug B — multi-source mappings route `repo://<corpus>/...` to the
+    /// matching root.
+    #[test]
+    fn multi_source_routes_by_corpus_name() {
+        let tmp = tempdir_in_target("drift-multi");
+        let n8n_root = tmp.join("n8n-fake");
+        let idl_root = tmp.join("IDL-fake");
+        std::fs::create_dir_all(n8n_root.join("packages/cli")).unwrap();
+        std::fs::create_dir_all(&idl_root).unwrap();
+        std::fs::write(idl_root.join("notes.md"), "hello\n").unwrap();
+
+        let nodes = vec![
+            anchored_node("scope:n8n", "scope", "repo://n8n/packages/cli", None),
+            anchored_node(
+                "decision:idl",
+                "decision",
+                "repo://IDL/notes.md",
+                Some(RangeDoc { start_line: Some(1), end_line: Some(1), ..Default::default() }),
+            ),
+        ];
+        let mappings = vec![
+            ("n8n".to_string(), n8n_root.clone()),
+            ("IDL".to_string(), idl_root.clone()),
+        ];
+        let r = diff_against_sources("g", &doc_with(nodes, vec![]), &mappings);
+        assert_eq!(r.aligned(), 2, "both URIs should resolve under their mapped root: {:?}", r.entries);
+        assert_eq!(r.missing(), 0);
+    }
+
+    /// Bug D — verdict serialisation in markdown/human output is lowercase
+    /// (no `Aligned` / `Shifted` debug casing).
+    #[test]
+    fn verdict_rendering_is_lowercase() {
+        let tmp = tempdir_in_target("drift-verdict");
+        let dir = tmp.join("src");
+        std::fs::create_dir_all(&dir).unwrap();
+        let g = doc_with(
+            vec![anchored_node("scope:s", "scope", "src", None)],
+            vec![],
+        );
+        let r = diff_against_source("g", &g, &tmp);
+        let md = r.to_markdown();
+        let human = r.to_human();
+        assert!(md.contains("`aligned`"), "markdown should use lowercase verdict, got:\n{md}");
+        assert!(!md.contains("`Aligned`"), "markdown leaks Debug casing:\n{md}");
+        assert!(human.contains("[aligned]"), "human should use lowercase verdict:\n{human}");
+
+        // JSON already lowercase via serde rename_all.
+        let j = r.to_json();
+        assert!(j.contains("\"aligned\""));
+        assert!(!j.contains("\"Aligned\""));
+    }
+
+    fn tempdir_in_target(label: &str) -> std::path::PathBuf {
+        // Use target/ inside the workspace so we never touch /tmp.
+        let base = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../target/idl-drift-tests")
+            .join(format!("{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        base
     }
 }

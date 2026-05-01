@@ -62,7 +62,7 @@ pub struct EdgeDoc {
 }
 
 /// On-disk source anchor — `range` is the schema's object form.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceAnchorDoc {
     pub uri: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -88,7 +88,7 @@ pub struct RangeDoc {
     pub end_char: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConfidenceDoc {
     pub score: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]

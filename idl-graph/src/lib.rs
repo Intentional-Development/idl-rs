@@ -16,6 +16,7 @@
 pub mod doc;
 pub mod drift;
 pub mod edge;
+pub mod extensions_dto;
 pub mod graph;
 pub mod kind;
 pub mod loss;
@@ -28,6 +29,10 @@ pub use doc::{ConfidenceDoc, EdgeDoc, GraphDoc, NodeDoc, RangeDoc, SourceAnchorD
 pub use drift::{
     diff_against_source, diff_against_sources, diff_graphs, AnchorEntry, AnchorReport, AnchorVerdict, DriftEntry,
     DriftEvent, DriftReport, DriftSeverity, PropChange,
+};
+pub use extensions_dto::{
+    parse_dtos, project_field_set, projected_fields_ordered, validate_dtos, DtoDefinition,
+    DtoExtra, DtoViolation, ProjectedField,
 };
 
 pub use edge::{Edge, EdgeId};

@@ -199,3 +199,135 @@ fn openapi_emitter_emits_components_schemas_with_refs() {
         .expect("requestBody schema $ref");
     assert_eq!(schema_ref, "#/components/schemas/BodyCreateArticle");
 }
+
+/// Wave 12 — DTO referenced via `operation.props.accepts.dto` is emitted
+/// under `components.schemas.<DtoName>` as a pick projection of the base
+/// entity, and the operation's requestBody points at it instead of the
+/// `Body<OpName>` stub.
+#[test]
+fn openapi_emitter_emits_dto_projection_for_accepts_dto() {
+    let nodes = vec![
+        node("entity:user", "entity", json!({
+            "name": "User",
+            "attributes": [
+                {"name":"id","type":"int","unique":true},
+                {"name":"email","type":"string"},
+                {"name":"username","type":"string"},
+                {"name":"password","type":"string"},
+                {"name":"bio","type":"string","nullable":true},
+                {"name":"image","type":"string","nullable":true}
+            ]
+        })),
+        node("operation:login-user", "operation", json!({
+            "name":"login-user",
+            "inputs":[{"name":"email","type":"string"},{"name":"password","type":"string"}],
+            "outputs":[],
+            "side_effects":[],
+            "accepts": {"dto": "dto:LoginUser"}
+        })),
+        node("api:auth", "api", json!({
+            "name":"auth","protocol":"rest",
+            "endpoints":[{"method":"POST","path":"/users/login","operation_id":"operation:login-user"}]
+        })),
+    ];
+    let g = GraphDoc {
+        version: "0.1.2".into(),
+        metadata: json!({"project":"dto"}),
+        nodes,
+        edges: vec![],
+        extensions: Some(json!({
+            "dto": {"definitions": [
+                {
+                    "id": "dto:LoginUser",
+                    "base": "entity:user",
+                    "state": "proposed",
+                    "created_by": "ai",
+                    "pick": ["email", "password"],
+                    "required": ["email", "password"]
+                }
+            ]}
+        })),
+    };
+    let r = OpenApiEmitter.emit(&g).unwrap();
+    let y = &r.files[0].content;
+    let parsed: serde_yaml::Value = serde_yaml::from_str(y).expect("yaml parses");
+    let schemas = parsed.get("components").and_then(|c| c.get("schemas")).unwrap();
+
+    let login = schemas.get("LoginUser").expect("LoginUser DTO emitted");
+    let props = login.get("properties").expect("LoginUser has properties").as_mapping().unwrap();
+    let prop_names: std::collections::BTreeSet<_> =
+        props.keys().filter_map(|k| k.as_str()).collect();
+    assert_eq!(
+        prop_names,
+        ["email", "password"].iter().copied().collect(),
+        "LoginUser projection should be exactly email + password, got {prop_names:?}"
+    );
+
+    // Stub Body schema must NOT be emitted when accepts.dto is set.
+    assert!(
+        schemas.get("BodyLogin-user").is_none()
+            && schemas.get("BodyLoginUser").is_none(),
+        "stub body should be suppressed when accepts.dto is present"
+    );
+
+    // requestBody $ref points at the DTO.
+    let post = parsed.get("paths").and_then(|p| p.get("/users/login"))
+        .and_then(|p| p.get("post")).unwrap();
+    let r = post.get("requestBody").and_then(|b| b.get("content"))
+        .and_then(|c| c.get("application/json")).and_then(|j| j.get("schema"))
+        .and_then(|s| s.get("$ref")).and_then(|v| v.as_str()).unwrap();
+    assert_eq!(r, "#/components/schemas/LoginUser");
+}
+
+/// Wave 12 — DTO with extras and omit projects (base ∖ omit) ∪ extras and
+/// emits `required` exactly as declared.
+#[test]
+fn openapi_emitter_dto_omit_extras_required() {
+    let nodes = vec![node("entity:user", "entity", json!({
+        "name": "User",
+        "attributes": [
+            {"name":"id","type":"int","unique":true},
+            {"name":"email","type":"string"},
+            {"name":"username","type":"string"},
+            {"name":"password","type":"string"},
+            {"name":"bio","type":"string","nullable":true},
+            {"name":"image","type":"string","nullable":true}
+        ]
+    }))];
+    let g = GraphDoc {
+        version: "0.1.2".into(),
+        metadata: json!({"project":"dto"}),
+        nodes,
+        edges: vec![],
+        extensions: Some(json!({
+            "dto": {"definitions": [
+                {
+                    "id": "dto:User",
+                    "base": "entity:user",
+                    "state": "proposed",
+                    "created_by": "ai",
+                    "omit": ["id", "password"],
+                    "extras": {"token": {"type":"string"}},
+                    "required": ["email", "username", "bio", "image", "token"]
+                }
+            ]}
+        })),
+    };
+    let r = OpenApiEmitter.emit(&g).unwrap();
+    let y = &r.files[0].content;
+    let parsed: serde_yaml::Value = serde_yaml::from_str(y).expect("yaml parses");
+    let user = parsed.get("components").and_then(|c| c.get("schemas"))
+        .and_then(|s| s.get("User")).expect("User DTO emitted");
+    let props: std::collections::BTreeSet<_> = user.get("properties").unwrap()
+        .as_mapping().unwrap().keys().filter_map(|k| k.as_str()).collect();
+    assert_eq!(
+        props,
+        ["email", "username", "bio", "image", "token"].iter().copied().collect()
+    );
+    let req: std::collections::BTreeSet<_> = user.get("required").unwrap().as_sequence().unwrap()
+        .iter().filter_map(|v| v.as_str()).collect();
+    assert_eq!(
+        req,
+        ["email", "username", "bio", "image", "token"].iter().copied().collect()
+    );
+}

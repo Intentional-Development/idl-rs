@@ -1,0 +1,19 @@
+[package]
+name = "idl-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "FFI bindings for Swift/SwiftUI macOS Workbench"
+
+[lib]
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+idl-core = { path = "../idl-core" }
+anyhow = { workspace = true }
+
+# FFI dependencies (to be added when implementing)
+# swift-bridge = "0.1"  # or cbindgen approach

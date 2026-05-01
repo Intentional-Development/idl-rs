@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = [
+    "idl-core",
+    "idl-cli",
+    "idl-emitters",
+    "idl-extractors",
+    "idl-ffi",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+authors = ["IDL Squad <intentional@github.com>"]
+license = "MIT"
+repository = "https://github.com/Intentional-Development/firefly-iii-idl"
+
+[workspace.dependencies]
+# Core parsing
+nom = "7.1"
+regex = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "cargo"] }
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Async runtime (for future CLI I/O)
+tokio = { version = "1.40", features = ["full"] }
+
+# File system operations
+walkdir = "2.5"
+glob = "0.3"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Testing
+pretty_assertions = "1.4"

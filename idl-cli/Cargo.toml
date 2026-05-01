@@ -1,0 +1,28 @@
+[package]
+name = "idl-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "IDL command-line interface"
+
+[[bin]]
+name = "idl"
+path = "src/main.rs"
+
+[dependencies]
+idl-core = { path = "../idl-core" }
+idl-emitters = { path = "../idl-emitters" }
+idl-extractors = { path = "../idl-extractors" }
+
+clap = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+walkdir = { workspace = true }
+glob = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

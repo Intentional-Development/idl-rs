@@ -1,0 +1,14 @@
+[package]
+name = "idl-emitters"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "IDL code emitters for target languages (Node, Go, Python, Rust)"
+
+[dependencies]
+idl-core = { path = "../idl-core" }
+anyhow = { workspace = true }
+thiserror = { workspace = true }

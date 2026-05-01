@@ -1,0 +1,14 @@
+// Test fixture: a minimal valid IDL document.
+idl_version: "0.10.0"
+
+module TestProject.Example
+
+intent BookingIntent {
+  goal: "Allow users to book classes"
+}
+
+entity Booking {
+  description: "A reservation for a class slot"
+}
+
+

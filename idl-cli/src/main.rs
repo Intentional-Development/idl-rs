@@ -15,7 +15,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 mod commands;
 mod graph_build;
 
-use commands::{change, emit, extract, init, parse, validate, validate_schema, drift};
+use commands::{change, emit, extract, init, interview, parse, validate, validate_schema, drift};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -159,6 +159,43 @@ enum Commands {
         #[arg(short, long)]
         json: bool,
     },
+
+    /// Multi-round greenfield interview producing a proposed graph delta.
+    ///
+    /// `idl interview new --topic "todo app"`
+    /// `idl interview continue <session-id>`
+    /// `idl interview accept <session-id>`
+    /// `idl interview list`
+    /// `idl interview show <session-id>`
+    Interview {
+        #[command(subcommand)]
+        action: InterviewAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum InterviewAction {
+    /// Start a new session and run round 1.
+    New {
+        #[arg(long)]
+        topic: String,
+        #[arg(long, default_value_t = 5)]
+        rounds: u32,
+    },
+    /// Run the next round of an existing session.
+    Continue {
+        session_id: String,
+    },
+    /// Promote the accumulated delta into a proposed change folder.
+    Accept {
+        session_id: String,
+    },
+    /// List all sessions.
+    List,
+    /// Print the transcript and accumulated graph for a session.
+    Show {
+        session_id: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -299,5 +336,12 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             }
         },
         Commands::Parse { path, json } => parse::run(path, json),
+        Commands::Interview { action } => match action {
+            InterviewAction::New { topic, rounds } => interview::run_new(topic, rounds),
+            InterviewAction::Continue { session_id } => interview::run_continue(session_id),
+            InterviewAction::Accept { session_id } => interview::run_accept(session_id),
+            InterviewAction::List => interview::run_list(),
+            InterviewAction::Show { session_id } => interview::run_show(session_id),
+        },
     }
 }

@@ -1,0 +1,16 @@
+{
+  "graph_delta": {
+    "version": "0.1.0",
+    "nodes": [
+      {"id":"decision:todoapp-task-core-shape","kind":"decision","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-2"}],"confidence":{"score":0.86,"model":"gpt-5.5","run_id":"demo"},"props":{"id":"todoapp-task-core-shape","statement":"Task has title and completion status; due dates are deferred.","status":"proposed","alternatives":["include due_at now"],"rationale":"User accepted a simple MVP."}},
+      {"id":"entity:task","kind":"entity","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-2"}],"confidence":{"score":0.88,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-task-core-shape"],"props":{"name":"Task","attributes":[{"name":"id","type":"uuid","unique":true},{"name":"title","type":"string"},{"name":"completed","type":"boolean"}]}},
+      {"id":"variant:task-completed","kind":"variant","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-2"}],"confidence":{"score":0.75,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-task-core-shape"],"props":{"name":"CompletedTask","of_entity_or_intent":"entity:task","condition":"completed == true"}}
+    ],
+    "edges": [
+      {"id":"edge:completed-variant-of-task","kind":"variant_of","from":"variant:task-completed","to":"entity:task"}
+    ]
+  },
+  "questions": [],
+  "decisions": [{"id":"decision:todoapp-task-core-shape","question_ref":"q-r1-001","answer":"Defer due dates","status":"proposed"}],
+  "confidence_overall": 0.83
+}

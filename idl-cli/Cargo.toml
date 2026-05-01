@@ -17,6 +17,8 @@ idl-core = { path = "../idl-core" }
 idl-emitters = { path = "../idl-emitters" }
 idl-extractors = { path = "../idl-extractors" }
 idl-graph = { path = "../idl-graph" }
+idl-llm = { path = "../idl-llm" }
+idl-interview = { path = "../idl-interview" }
 
 clap = { workspace = true }
 anyhow = { workspace = true }

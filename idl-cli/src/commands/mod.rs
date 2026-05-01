@@ -6,6 +6,7 @@ pub mod drift;
 pub mod emit;
 pub mod extract;
 pub mod init;
+pub mod interview;
 pub mod parse;
 pub mod validate;
 pub mod validate_anchors;

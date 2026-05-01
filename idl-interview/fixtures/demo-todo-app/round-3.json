@@ -1,0 +1,18 @@
+{
+  "graph_delta": {
+    "version": "0.1.0",
+    "nodes": [
+      {"id":"decision:todoapp-local-api","kind":"decision","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-3"}],"confidence":{"score":0.80,"model":"gpt-5.5","run_id":"demo"},"props":{"id":"todoapp-local-api","statement":"Expose local task operations before remote sync.","status":"proposed","alternatives":["REST API first","sync service first"],"rationale":"Solo MVP does not require collaboration or external systems."}},
+      {"id":"operation:create-task","kind":"operation","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-3"}],"confidence":{"score":0.88,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-local-api"],"props":{"name":"CreateTask","inputs":[{"name":"title","type":"string"}],"outputs":[{"name":"task_id","type":"uuid"}],"side_effects":["task.persisted"]}},
+      {"id":"operation:complete-task","kind":"operation","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-3"}],"confidence":{"score":0.87,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-local-api"],"props":{"name":"CompleteTask","inputs":[{"name":"task_id","type":"uuid"}],"outputs":[{"name":"task","type":"Task"}],"side_effects":["task.completed=true"]}},
+      {"id":"event:task-completed","kind":"event","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-3"}],"confidence":{"score":0.82,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-local-api"],"props":{"name":"TaskCompleted","payload_schema":{"task_id":"uuid"},"source_kind":"operation","source_id":"operation:complete-task"}},
+      {"id":"state_machine:task-status","kind":"state_machine","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-3"}],"confidence":{"score":0.84,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-local-api"],"props":{"entity_or_aggregate":"entity:task","states":["active","completed"],"transitions":[{"from":"active","to":"completed","trigger":"CompleteTask"}]}}
+    ],
+    "edges": [
+      {"id":"edge:complete-emits-task-completed","kind":"emits","from":"operation:complete-task","to":"event:task-completed"}
+    ]
+  },
+  "questions": [],
+  "decisions": [],
+  "confidence_overall": 0.82
+}

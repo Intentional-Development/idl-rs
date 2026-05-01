@@ -1,0 +1,16 @@
+{
+  "graph_delta": {
+    "version": "0.1.0",
+    "nodes": [
+      {"id":"decision:todoapp-initial-intent-ready","kind":"decision","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-5"}],"confidence":{"score":0.84,"model":"gpt-5.5","run_id":"demo"},"props":{"id":"todoapp-initial-intent-ready","statement":"Initial TodoApp intent is ready as a proposed change with delete and due dates deferred.","status":"proposed","alternatives":["ask for more planning features now"],"rationale":"Core capture/list/complete slice has enough domain, behavior, rules, and verification coverage."}},
+      {"id":"verification:todoapp-core-behavior","kind":"verification","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-5"}],"confidence":{"score":0.86,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-initial-intent-ready"],"props":{"name":"TodoAppCoreBehavior","kind":"test","targets":["operation:create-task","operation:complete-task","state_machine:task-status"],"status":"unknown"}}
+    ],
+    "edges": [
+      {"id":"edge:core-verifies-create","kind":"verifies","from":"verification:todoapp-core-behavior","to":"operation:create-task"},
+      {"id":"edge:core-verifies-complete","kind":"verifies","from":"verification:todoapp-core-behavior","to":"operation:complete-task"}
+    ]
+  },
+  "questions": [],
+  "decisions": [{"id":"decision:todoapp-initial-intent-ready","question_ref":null,"answer":"Ready to promote to changes/0001-initial-intent as proposed.","status":"proposed"}],
+  "confidence_overall": 0.86
+}

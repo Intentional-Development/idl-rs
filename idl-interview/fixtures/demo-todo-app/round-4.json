@@ -1,0 +1,17 @@
+{
+  "graph_delta": {
+    "version": "0.1.0",
+    "nodes": [
+      {"id":"decision:todoapp-single-owner","kind":"decision","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-4"}],"confidence":{"score":0.82,"model":"gpt-5.5","run_id":"demo"},"props":{"id":"todoapp-single-owner","statement":"All task operations are scoped to the current solo user.","status":"proposed","alternatives":["anonymous local-only","multi-user sharing"],"rationale":"Solo user implies no cross-user access in MVP."}},
+      {"id":"rule:task-title-required","kind":"rule","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-4"}],"confidence":{"score":0.86,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-single-owner"],"props":{"name":"TaskTitleRequired","predicate":"trim(Task.title) != ''","scope_id":"scope:todoapp-mvp"}},
+      {"id":"access_pattern:list-active-tasks","kind":"access_pattern","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-4"}],"confidence":{"score":0.84,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-single-owner"],"props":{"name":"ListActiveTasks","entity_or_aggregate":"entity:task","shape":"scan","expected_size":"page","predicates":["completed == false"]}}
+    ],
+    "edges": [
+      {"id":"edge:title-rule-constrains-task","kind":"constrains","from":"rule:task-title-required","to":"entity:task"},
+      {"id":"edge:list-active-queries-task","kind":"queries","from":"access_pattern:list-active-tasks","to":"entity:task"}
+    ]
+  },
+  "questions": [],
+  "decisions": [],
+  "confidence_overall": 0.83
+}

@@ -1,0 +1,18 @@
+{
+  "graph_delta": {
+    "version": "0.1.0",
+    "nodes": [
+      {"id":"decision:todoapp-mvp-persona","kind":"decision","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-1"}],"confidence":{"score":0.78,"model":"gpt-5.5","run_id":"demo"},"props":{"id":"todoapp-mvp-persona","statement":"Optimize TodoApp for a solo user MVP.","status":"proposed","alternatives":["team collaboration first"],"rationale":"The brief says solo users; collaboration is not implied."}},
+      {"id":"intent:todoapp-capture-complete","kind":"intent","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-1"}],"confidence":{"score":0.76,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-mvp-persona"],"props":{"statement":"Help a solo user capture, view, and complete personal tasks.","persona":"solo user","success_criteria":["User can add a task","User can mark a task complete","User can see active and completed tasks"]}},
+      {"id":"scope:todoapp-mvp","kind":"scope","state":"proposed","created_by":"ai","source_anchors":[{"uri":"idl://interview/session-demo/round-1"}],"confidence":{"score":0.74,"model":"gpt-5.5","run_id":"demo"},"decision_refs":["decision:todoapp-mvp-persona"],"props":{"included":["single-user task capture","task completion","task list view"],"excluded":["teams","payments","notifications"]}}
+    ],
+    "edges": [
+      {"id":"edge:todoapp-scope-contains-intent","kind":"contains","from":"scope:todoapp-mvp","to":"intent:todoapp-capture-complete"}
+    ]
+  },
+  "questions": [
+    {"id":"q-r1-001","question":"Should tasks need due dates in the MVP?","default":"No; keep due dates out unless time planning is core.","why_it_matters":"It changes entity shape and access patterns.","blocks":["entity:task"]}
+  ],
+  "decisions": [],
+  "confidence_overall": 0.76
+}

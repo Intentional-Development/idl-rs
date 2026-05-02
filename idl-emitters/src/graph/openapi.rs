@@ -287,11 +287,13 @@ impl GraphEmitter for OpenApiEmitter {
                     if let Some(discriminator) = &dto.discriminator {
                         let _ = writeln!(s, "      discriminator:");
                         let _ = writeln!(s, "        propertyName: {}", discriminator.property);
-                        if !discriminator.mapping.is_empty() {
-                            let _ = writeln!(s, "        mapping:");
-                            for (key, target) in &discriminator.mapping {
-                                let mapped = target.strip_prefix("dto:").map(dto_name).unwrap_or_else(|| target.clone());
-                                let _ = writeln!(s, "          {}: '#/components/schemas/{}'", yaml_str(key), mapped);
+                        if let Some(mapping) = &discriminator.mapping {
+                            if !mapping.is_empty() {
+                                let _ = writeln!(s, "        mapping:");
+                                for (key, target) in mapping {
+                                    let mapped = target.strip_prefix("dto:").map(dto_name).unwrap_or_else(|| target.clone());
+                                    let _ = writeln!(s, "          {}: '#/components/schemas/{}'", yaml_str(key), mapped);
+                                }
                             }
                         }
                     }

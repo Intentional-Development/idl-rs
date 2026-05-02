@@ -15,8 +15,9 @@ use tracing_subscriber::{fmt, EnvFilter};
 mod commands;
 mod diagnostic_formatter;
 mod graph_build;
+mod proposals;
 
-use commands::{change, emit, extract, init, interview, parse, validate, validate_schema, drift};
+use commands::{change, emit, extract, init, interview, parse, propose, validate, validate_schema, drift};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -172,6 +173,26 @@ enum Commands {
         #[command(subcommand)]
         action: InterviewAction,
     },
+
+    /// Create a new proposal from a change specification.
+    ///
+    /// `idl propose <graph-path> <change-spec.json>`
+    Propose {
+        /// Path to the target graph file.
+        graph: PathBuf,
+        /// Path to the change specification JSON file.
+        change_spec: PathBuf,
+    },
+
+    /// Manage proposals (list, accept, reject).
+    ///
+    /// `idl proposals list`
+    /// `idl proposals accept <id>`
+    /// `idl proposals reject <id> --reason "..."`
+    Proposals {
+        #[command(subcommand)]
+        action: ProposalsAction,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -196,6 +217,25 @@ enum InterviewAction {
     /// Print the transcript and accumulated graph for a session.
     Show {
         session_id: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum ProposalsAction {
+    /// List all proposals.
+    List,
+    /// Accept a proposal and apply it to the target graph.
+    Accept {
+        /// Proposal ID (or prefix).
+        id: String,
+    },
+    /// Reject a proposal with a reason.
+    Reject {
+        /// Proposal ID (or prefix).
+        id: String,
+        /// Rejection reason.
+        #[arg(long)]
+        reason: String,
     },
 }
 
@@ -350,6 +390,12 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             InterviewAction::Accept { session_id } => interview::run_accept(session_id),
             InterviewAction::List => interview::run_list(),
             InterviewAction::Show { session_id } => interview::run_show(session_id),
+        },
+        Commands::Propose { graph, change_spec } => propose::run(graph, change_spec),
+        Commands::Proposals { action } => match action {
+            ProposalsAction::List => commands::proposals::list(),
+            ProposalsAction::Accept { id } => commands::proposals::accept(id),
+            ProposalsAction::Reject { id, reason } => commands::proposals::reject(id, reason),
         },
     }
 }

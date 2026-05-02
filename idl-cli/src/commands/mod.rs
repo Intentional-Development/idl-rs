@@ -8,6 +8,8 @@ pub mod extract;
 pub mod init;
 pub mod interview;
 pub mod parse;
+pub mod propose;
+pub mod proposals;
 pub mod validate;
 pub mod validate_anchors;
 pub mod validate_schema;

@@ -258,6 +258,8 @@ fn project_field_set_omit_plus_extras() {
         base: "entity:user".into(),
         state: "proposed".into(),
         created_by: "ai".into(),
+        wrapper: false,
+        wraps: None,
         pick: None,
         omit: Some(vec!["id".into(), "password".into()]),
         required: vec![],

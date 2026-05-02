@@ -12,7 +12,7 @@ fn main() -> Result<()> {
         .with_context(|| format!("read base graph {}", args.base_graph.display()))?;
     let mut graph: Value = serde_json::from_str(&base_text).context("parse base graph JSON")?;
 
-    graph["version"] = Value::String("0.1.6".into());
+    graph["version"] = Value::String("0.1.7".into());
     graph
         .get_mut("metadata")
         .and_then(Value::as_object_mut)
@@ -119,6 +119,96 @@ impl Args {
 }
 
 fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
+    // v0.1.7: paginated — check for paginated list pattern (data: array<T> + metadata)
+    if let Some(props) = schema.get("properties").and_then(Value::as_object) {
+        if let Some(data_prop) = props.get("data") {
+            if data_prop.get("type").and_then(Value::as_str) == Some("array") {
+                if let Some(items) = data_prop.get("items") {
+                    if let Some(ref_val) = items.get("$ref").and_then(Value::as_str) {
+                        if let Some(item_name) = ref_val.strip_prefix("#/components/schemas/") {
+                            // Check if this looks like a paginated schema (has pagination metadata)
+                            let has_pagination_metadata = props.contains_key("has_more")
+                                || props.contains_key("url")
+                                || props.contains_key("meta")
+                                || props.contains_key("links")
+                                || props.contains_key("total")
+                                || props.contains_key("object");
+                            
+                            if has_pagination_metadata {
+                                let mut def = common_def(name, schema, "paginated");
+                                def.insert("items".into(), Value::String(format!("dto:{item_name}")));
+                                
+                                // Extract pagination metadata fields
+                                if props.contains_key("has_more") {
+                                    def.insert("has_more_field".into(), Value::String("has_more".into()));
+                                }
+                                if props.contains_key("total") {
+                                    def.insert("total_field".into(), Value::String("total".into()));
+                                }
+                                
+                                // Collect other metadata fields
+                                let mut meta_fields = Map::new();
+                                for (k, v) in props.iter() {
+                                    if k != "data" {
+                                        let type_str = if v.get("type").is_some() {
+                                            v.get("type").and_then(Value::as_str).unwrap_or("string").to_string()
+                                        } else if v.get("$ref").is_some() {
+                                            "object".to_string()
+                                        } else {
+                                            "string".to_string()
+                                        };
+                                        meta_fields.insert(k.clone(), Value::String(type_str));
+                                    }
+                                }
+                                if !meta_fields.is_empty() {
+                                    def.insert("meta_fields".into(), Value::Object(meta_fields));
+                                }
+                                
+                                return Some(Value::Object(def));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // v0.1.6: array-alias — check if schema is `type: array` with `items: $ref`
+    if schema.get("type").and_then(Value::as_str) == Some("array") {
+        if let Some(items) = schema.get("items") {
+            if let Some(ref_val) = items.get("$ref").and_then(Value::as_str) {
+                if let Some(item_name) = ref_val.strip_prefix("#/components/schemas/") {
+                    let mut def = common_def(name, schema, "array-alias");
+                    def.insert("items".into(), Value::String(format!("dto:{item_name}")));
+                    return Some(Value::Object(def));
+                }
+            }
+        }
+    }
+
+    // v0.1.6: union — check for oneOf/anyOf
+    if let Some(one_of) = schema.get("oneOf").and_then(Value::as_array) {
+        if let Some(variants) = extract_union_variants(one_of) {
+            let mut def = common_def(name, schema, "union");
+            def.insert("variants".into(), Value::Array(variants));
+            if let Some(disc) = extract_discriminator(schema) {
+                def.insert("discriminator".into(), disc);
+            }
+            return Some(Value::Object(def));
+        }
+    }
+    if let Some(any_of) = schema.get("anyOf").and_then(Value::as_array) {
+        if let Some(variants) = extract_union_variants(any_of) {
+            let mut def = common_def(name, schema, "union");
+            def.insert("variants".into(), Value::Array(variants));
+            if let Some(disc) = extract_discriminator(schema) {
+                def.insert("discriminator".into(), disc);
+            }
+            return Some(Value::Object(def));
+        }
+    }
+
+    // enum
     if let Some(values) = schema.get("enum").and_then(Value::as_array) {
         let mut strings = Vec::new();
         let mut nullable = schema.get("nullable").and_then(Value::as_bool).unwrap_or(false);
@@ -161,6 +251,46 @@ fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
     }
 
     None
+}
+
+fn extract_union_variants(items: &[Value]) -> Option<Vec<Value>> {
+    let mut variants = Vec::new();
+    for item in items {
+        if let Some(ref_val) = item.get("$ref").and_then(Value::as_str) {
+            if let Some(variant_name) = ref_val.strip_prefix("#/components/schemas/") {
+                variants.push(json!({"ref": format!("dto:{variant_name}")}));
+            }
+        } else if let Some(type_str) = item.get("type").and_then(Value::as_str) {
+            // inline primitive types (e.g., oneOf: [type: boolean, type: string])
+            variants.push(json!({"type": type_str}));
+        }
+    }
+    if variants.is_empty() {
+        None
+    } else {
+        Some(variants)
+    }
+}
+
+fn extract_discriminator(schema: &Value) -> Option<Value> {
+    let disc = schema.get("discriminator")?;
+    let property = disc.get("propertyName")?.as_str()?;
+    let mut result = Map::new();
+    result.insert("property".into(), Value::String(property.into()));
+    if let Some(mapping) = disc.get("mapping").and_then(Value::as_object) {
+        let mut m = Map::new();
+        for (k, v) in mapping {
+            if let Some(ref_val) = v.as_str() {
+                if let Some(dto_name) = ref_val.strip_prefix("#/components/schemas/") {
+                    m.insert(k.clone(), Value::String(format!("dto:{dto_name}")));
+                }
+            }
+        }
+        if !m.is_empty() {
+            result.insert("mapping".into(), Value::Object(m));
+        }
+    }
+    Some(Value::Object(result))
 }
 
 fn common_def(name: &str, _schema: &Value, kind: &str) -> Map<String, Value> {

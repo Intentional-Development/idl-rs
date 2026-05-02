@@ -9,6 +9,7 @@ members = [
     "idl-graph",
     "idl-llm",
     "idl-interview",
+    "idl-typeexpr",
 ]
 
 [workspace.package]

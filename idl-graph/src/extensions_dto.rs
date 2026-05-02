@@ -44,6 +44,8 @@ pub enum DtoKind {
     ArrayAlias,
     /// Union type (Wave 16). Polymorphic schema with `variants` array.
     Union,
+    /// Paginated type (Wave 18). API list response with envelope wrapper (data array + pagination metadata).
+    Paginated,
 }
 
 impl Default for DtoKind {
@@ -81,6 +83,15 @@ pub struct DtoDefinition {
     pub variants: Option<Vec<DtoVariant>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discriminator: Option<DtoDiscriminator>,
+    // Paginated fields (Wave 18)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor_field: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub has_more_field: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_field: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meta_fields: Option<BTreeMap<String, String>>,
     // Object-kind fields
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub wrapper: bool,
@@ -491,6 +502,46 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
                     }
                 }
                 // discriminator only valid for union kind (checked globally below).
+            }
+            DtoKind::Paginated => {
+                // Paginated requires items.
+                if dto.items.is_none() {
+                    out.push(DtoViolation::new(
+                        "dto-paginated-requires-items",
+                        dto,
+                        "kind: \"paginated\" requires items field".to_string(),
+                    ));
+                }
+                // Paginated forbids projection fields.
+                if dto.base.is_some()
+                    || dto.pick.is_some()
+                    || dto.omit.is_some()
+                    || !dto.extras.is_empty()
+                    || dto.wrapper
+                    || dto.wraps.is_some()
+                    || dto.values.is_some()
+                    || dto.value_type.is_some()
+                    || dto.variants.is_some()
+                    || dto.discriminator.is_some()
+                {
+                    out.push(DtoViolation::new(
+                        "dto-paginated-no-projection",
+                        dto,
+                        "kind: \"paginated\" forbids base, pick, omit, extras, wrapper, wraps, values, value_type, variants, discriminator".to_string(),
+                    ));
+                }
+                // items must resolve to known DTO id or valid primitive.
+                if let Some(items_ref) = &dto.items {
+                    let is_primitive = matches!(items_ref.as_str(), "string" | "integer" | "number" | "boolean");
+                    let is_dto = items_ref.starts_with("dto:") && (seen_ids.contains(items_ref.as_str()) || dtos.iter().any(|d| d.id == *items_ref));
+                    if !is_primitive && !is_dto {
+                        out.push(DtoViolation::new(
+                            "dto-paginated-items-resolves",
+                            dto,
+                            format!("items {:?} must be a valid primitive or known DTO id", items_ref),
+                        ));
+                    }
+                }
             }
         }
 
@@ -986,5 +1037,215 @@ mod tests {
             .filter(|v| v.dto_id == "dto:User")
             .collect();
         assert!(dto_violations.is_empty(), "Expected no violations for backward-compat DTO, got: {:?}", dto_violations);
+    }
+
+    // Wave 18: Paginated kind tests
+    #[test]
+    fn test_paginated_stripe_style() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:User",
+                        "base": "entity:user",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "pick": ["email"]
+                    },
+                    {
+                        "id": "dto:ChargeList",
+                        "kind": "paginated",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "items": "dto:User",
+                        "has_more_field": "has_more",
+                        "meta_fields": {
+                            "url": "string",
+                            "object": "string"
+                        }
+                    }
+                ]
+            }
+        }));
+
+        let dtos = parse_dtos(&graph).unwrap();
+        let paginated = dtos.iter().find(|d| d.id == "dto:ChargeList").unwrap();
+        assert_eq!(paginated.kind, DtoKind::Paginated);
+        assert_eq!(paginated.items, Some("dto:User".to_string()));
+        assert_eq!(paginated.has_more_field, Some("has_more".to_string()));
+        assert!(paginated.meta_fields.is_some());
+
+        let violations = validate_dtos(&graph);
+        let pag_violations: Vec<_> = violations.iter()
+            .filter(|v| v.dto_id == "dto:ChargeList")
+            .collect();
+        assert!(pag_violations.is_empty(), "Expected no violations for Stripe-style paginated DTO, got: {:?}", pag_violations);
+    }
+
+    #[test]
+    fn test_paginated_firefly_style() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:AccountRead",
+                        "base": "entity:user",
+                        "state": "proposed",
+                        "created_by": "ai"
+                    },
+                    {
+                        "id": "dto:AccountArray",
+                        "kind": "paginated",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "items": "dto:AccountRead",
+                        "total_field": "meta.pagination.total",
+                        "meta_fields": {
+                            "meta": "object",
+                            "links": "object"
+                        }
+                    }
+                ]
+            }
+        }));
+
+        let dtos = parse_dtos(&graph).unwrap();
+        let paginated = dtos.iter().find(|d| d.id == "dto:AccountArray").unwrap();
+        assert_eq!(paginated.kind, DtoKind::Paginated);
+        assert_eq!(paginated.items, Some("dto:AccountRead".to_string()));
+        assert_eq!(paginated.total_field, Some("meta.pagination.total".to_string()));
+
+        let violations = validate_dtos(&graph);
+        let pag_violations: Vec<_> = violations.iter()
+            .filter(|v| v.dto_id == "dto:AccountArray")
+            .collect();
+        assert!(pag_violations.is_empty(), "Expected no violations for firefly-style paginated DTO, got: {:?}", pag_violations);
+    }
+
+    #[test]
+    fn test_paginated_minimal() {
+        let graph = serde_json::from_value(json!({
+            "version": "0.1.7",
+            "nodes": [],
+            "edges": [],
+            "extensions": {
+                "dto": {
+                    "definitions": [
+                        {
+                            "id": "dto:SimpleList",
+                            "kind": "paginated",
+                            "state": "proposed",
+                            "created_by": "ai",
+                            "items": "string"
+                        }
+                    ]
+                }
+            }
+        })).unwrap();
+
+        let dtos = parse_dtos(&graph).unwrap();
+        assert_eq!(dtos[0].kind, DtoKind::Paginated);
+        assert_eq!(dtos[0].items, Some("string".to_string()));
+
+        let violations = validate_dtos(&graph);
+        let pag_violations: Vec<_> = violations.iter()
+            .filter(|v| v.dto_id == "dto:SimpleList")
+            .collect();
+        assert!(pag_violations.is_empty(), "Expected no violations for minimal paginated DTO, got: {:?}", pag_violations);
+    }
+
+    #[test]
+    fn test_paginated_full_form() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:Item",
+                        "base": "entity:user",
+                        "state": "proposed",
+                        "created_by": "ai"
+                    },
+                    {
+                        "id": "dto:FullList",
+                        "kind": "paginated",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "items": "dto:Item",
+                        "cursor_field": "starting_after",
+                        "has_more_field": "has_more",
+                        "total_field": "total",
+                        "meta_fields": {
+                            "url": "string",
+                            "object": "string",
+                            "count": "integer"
+                        }
+                    }
+                ]
+            }
+        }));
+
+        let dtos = parse_dtos(&graph).unwrap();
+        let paginated = dtos.iter().find(|d| d.id == "dto:FullList").unwrap();
+        assert_eq!(paginated.kind, DtoKind::Paginated);
+        assert_eq!(paginated.cursor_field, Some("starting_after".to_string()));
+        assert_eq!(paginated.has_more_field, Some("has_more".to_string()));
+        assert_eq!(paginated.total_field, Some("total".to_string()));
+        assert!(paginated.meta_fields.as_ref().unwrap().contains_key("url"));
+
+        let violations = validate_dtos(&graph);
+        let pag_violations: Vec<_> = violations.iter()
+            .filter(|v| v.dto_id == "dto:FullList")
+            .collect();
+        assert!(pag_violations.is_empty(), "Expected no violations for full-form paginated DTO, got: {:?}", pag_violations);
+    }
+
+    #[test]
+    fn test_paginated_requires_items() {
+        let graph = serde_json::from_value(json!({
+            "version": "0.1.7",
+            "nodes": [],
+            "edges": [],
+            "extensions": {
+                "dto": {
+                    "definitions": [
+                        {
+                            "id": "dto:BrokenList",
+                            "kind": "paginated",
+                            "state": "proposed",
+                            "created_by": "ai"
+                        }
+                    ]
+                }
+            }
+        })).unwrap();
+
+        let violations = validate_dtos(&graph);
+        assert!(violations.iter().any(|v| v.rule == "dto-paginated-requires-items"));
+    }
+
+    #[test]
+    fn test_paginated_forbids_projection_fields() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:BrokenList",
+                        "kind": "paginated",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "items": "string",
+                        "base": "entity:user",
+                        "pick": ["email"]
+                    }
+                ]
+            }
+        }));
+
+        let violations = validate_dtos(&graph);
+        assert!(violations.iter().any(|v| v.rule == "dto-paginated-no-projection"));
     }
 }

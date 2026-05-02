@@ -264,6 +264,9 @@ fn project_field_set_omit_plus_extras() {
         value_type: None,
         key_type: None,
         nullable: false,
+        items: None,
+        variants: None,
+        discriminator: None,
         wrapper: false,
         wraps: None,
         pick: None,
@@ -273,7 +276,7 @@ fn project_field_set_omit_plus_extras() {
             let mut m = BTreeMap::new();
             m.insert(
                 "token".into(),
-                DtoExtra { ty: "string".into(), optional: false, format: None },
+                DtoExtra { ty: "string".into(), optional: false, format: None, nullable: false },
             );
             m
         },
@@ -290,4 +293,203 @@ fn project_field_set_omit_plus_extras() {
     let want: BTreeSet<String> =
         ["email", "username", "bio", "image", "token"].iter().map(|s| s.to_string()).collect();
     assert_eq!(projected, want);
+}
+
+// ========== Wave 16 tests ==========
+
+#[test]
+fn array_alias_round_trip() {
+    use idl_graph::extensions_dto::{DtoDefinition, DtoKind};
+    let dto = DtoDefinition {
+        id: "dto:BillArray".into(),
+        kind: DtoKind::ArrayAlias,
+        base: None,
+        state: "accepted".into(),
+        created_by: "ai".into(),
+        values: None,
+        value_type: None,
+        key_type: None,
+        nullable: false,
+        items: Some("dto:Bill".into()),
+        variants: None,
+        discriminator: None,
+        wrapper: false,
+        wraps: None,
+        pick: None,
+        omit: None,
+        required: vec![],
+        extras: BTreeMap::new(),
+        source_anchors: vec![],
+        decision_refs: vec![],
+        confidence: None,
+    };
+    let json = serde_json::to_value(&dto).unwrap();
+    let round_trip: DtoDefinition = serde_json::from_value(json.clone()).unwrap();
+    assert_eq!(dto, round_trip);
+    assert_eq!(json.get("kind").unwrap().as_str().unwrap(), "array-alias");
+    assert_eq!(json.get("items").unwrap().as_str().unwrap(), "dto:Bill");
+}
+
+#[test]
+fn union_round_trip() {
+    use idl_graph::extensions_dto::{DtoDefinition, DtoKind, DtoVariant, DtoDiscriminator};
+    let dto = DtoDefinition {
+        id: "dto:TransactionRead".into(),
+        kind: DtoKind::Union,
+        base: None,
+        state: "accepted".into(),
+        created_by: "ai".into(),
+        values: None,
+        value_type: None,
+        key_type: None,
+        nullable: false,
+        items: None,
+        variants: Some(vec![
+            DtoVariant { ty: None, ref_: Some("dto:TransactionSplit".into()), array: false },
+            DtoVariant { ty: None, ref_: Some("dto:TransactionDefault".into()), array: false },
+        ]),
+        discriminator: None,
+        wrapper: false,
+        wraps: None,
+        pick: None,
+        omit: None,
+        required: vec![],
+        extras: BTreeMap::new(),
+        source_anchors: vec![],
+        decision_refs: vec![],
+        confidence: None,
+    };
+    let json = serde_json::to_value(&dto).unwrap();
+    let round_trip: DtoDefinition = serde_json::from_value(json.clone()).unwrap();
+    assert_eq!(dto, round_trip);
+    assert_eq!(json.get("kind").unwrap().as_str().unwrap(), "union");
+    let vars = json.get("variants").unwrap().as_array().unwrap();
+    assert_eq!(vars.len(), 2);
+}
+
+#[test]
+fn union_with_discriminator_round_trip() {
+    use idl_graph::extensions_dto::{DtoDefinition, DtoKind, DtoVariant, DtoDiscriminator};
+    let mut mapping = BTreeMap::new();
+    mapping.insert("split".into(), "dto:TransactionSplit".into());
+    mapping.insert("default".into(), "dto:TransactionDefault".into());
+    
+    let dto = DtoDefinition {
+        id: "dto:TransactionRead".into(),
+        kind: DtoKind::Union,
+        base: None,
+        state: "accepted".into(),
+        created_by: "ai".into(),
+        values: None,
+        value_type: None,
+        key_type: None,
+        nullable: false,
+        items: None,
+        variants: Some(vec![
+            DtoVariant { ty: None, ref_: Some("dto:TransactionSplit".into()), array: false },
+            DtoVariant { ty: None, ref_: Some("dto:TransactionDefault".into()), array: false },
+        ]),
+        discriminator: Some(DtoDiscriminator {
+            property: "type".into(),
+            mapping,
+        }),
+        wrapper: false,
+        wraps: None,
+        pick: None,
+        omit: None,
+        required: vec![],
+        extras: BTreeMap::new(),
+        source_anchors: vec![],
+        decision_refs: vec![],
+        confidence: None,
+    };
+    let json = serde_json::to_value(&dto).unwrap();
+    let round_trip: DtoDefinition = serde_json::from_value(json.clone()).unwrap();
+    assert_eq!(dto, round_trip);
+    let disc = json.get("discriminator").unwrap();
+    assert_eq!(disc.get("property").unwrap().as_str().unwrap(), "type");
+}
+
+#[test]
+fn nullable_on_extras() {
+    use idl_graph::extensions_dto::{DtoDefinition, DtoKind, DtoExtra};
+    let mut extras = BTreeMap::new();
+    extras.insert(
+        "body".into(),
+        DtoExtra {
+            ty: "string".into(),
+            optional: false,
+            format: None,
+            nullable: true,
+        },
+    );
+    
+    let dto = DtoDefinition {
+        id: "dto:UpdateArticle".into(),
+        kind: DtoKind::Object,
+        base: Some("entity:article".into()),
+        state: "proposed".into(),
+        created_by: "ai".into(),
+        values: None,
+        value_type: None,
+        key_type: None,
+        nullable: false,
+        items: None,
+        variants: None,
+        discriminator: None,
+        wrapper: false,
+        wraps: None,
+        pick: None,
+        omit: None,
+        required: vec![],
+        extras,
+        source_anchors: vec![],
+        decision_refs: vec![],
+        confidence: None,
+    };
+    let json = serde_json::to_value(&dto).unwrap();
+    let round_trip: DtoDefinition = serde_json::from_value(json.clone()).unwrap();
+    assert_eq!(dto, round_trip);
+    let body_extra = json.get("extras").unwrap().get("body").unwrap();
+    assert_eq!(body_extra.get("nullable").unwrap().as_bool().unwrap(), true);
+}
+
+#[test]
+fn backward_compat_v015_loads_as_v016() {
+    // v0.1.5 graph (no items, variants, discriminator fields) should load cleanly
+    let graph_json = json!({
+        "version": "0.1.5",
+        "nodes": [],
+        "edges": [],
+        "extensions": {
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:User",
+                        "kind": "object",
+                        "base": "entity:user",
+                        "state": "accepted",
+                        "created_by": "ai",
+                        "omit": ["password"],
+                        "source_anchors": [{"uri": "repo://example/spec.yml"}]
+                    },
+                    {
+                        "id": "dto:DeviceType",
+                        "kind": "enum",
+                        "state": "accepted",
+                        "created_by": "ai",
+                        "values": ["mobile", "desktop"],
+                        "source_anchors": [{"uri": "repo://example/spec.yml"}]
+                    }
+                ]
+            }
+        }
+    });
+    let graph: GraphDoc = serde_json::from_value(graph_json).unwrap();
+    let dtos = parse_dtos(&graph).unwrap();
+    assert_eq!(dtos.len(), 2);
+    assert_eq!(dtos[0].kind, DtoKind::Object);
+    assert_eq!(dtos[0].items, None);
+    assert_eq!(dtos[0].variants, None);
+    assert_eq!(dtos[1].kind, DtoKind::Enum);
 }

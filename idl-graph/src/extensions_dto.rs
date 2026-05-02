@@ -9,6 +9,11 @@
 //! unit, and object-projection DTOs. Backward compatible: absent `kind`
 //! defaults to `"object"`.
 //!
+//! Wave 16: Three new features per W16 CONSENSUS:
+//!   1. `nullable: boolean` on extras properties (orthogonal to requiredness).
+//!   2. `kind: "array-alias"` with `items` field for bare array schemas.
+//!   3. `kind: "union"` with `variants` array and optional `discriminator`.
+//!
 //! This module owns:
 //!   1. The `DtoDefinition` shape (parsed from the JSON graph document).
 //!   2. `validate_dtos(graph) -> Vec<DtoViolation>` — semantic validation
@@ -25,7 +30,7 @@ use crate::doc::{ConfidenceDoc, GraphDoc, SourceAnchorDoc};
 
 /// DTO kind discriminator. Determines the DTO shape and which fields are valid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum DtoKind {
     /// Entity-projection DTO. Projects from a `base` entity via pick/omit/extras.
     Object,
@@ -35,6 +40,10 @@ pub enum DtoKind {
     Map,
     /// Unit/empty type. Declares an object with no properties.
     Unit,
+    /// Array-alias type (Wave 16). Bare array schema with `items` field.
+    ArrayAlias,
+    /// Union type (Wave 16). Polymorphic schema with `variants` array.
+    Union,
 }
 
 impl Default for DtoKind {
@@ -64,6 +73,14 @@ pub struct DtoDefinition {
     pub key_type: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub nullable: bool,
+    // Array-alias fields (Wave 16)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub items: Option<String>,
+    // Union fields (Wave 16)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variants: Option<Vec<DtoVariant>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discriminator: Option<DtoDiscriminator>,
     // Object-kind fields
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub wrapper: bool,
@@ -99,6 +116,26 @@ pub struct DtoExtra {
     pub optional: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nullable: bool,
+}
+
+/// One variant in a union DTO (Wave 16).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DtoVariant {
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub ty: Option<String>,
+    #[serde(rename = "ref", skip_serializing_if = "Option::is_none")]
+    pub ref_: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub array: bool,
+}
+
+/// Discriminator for a union DTO (Wave 16).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DtoDiscriminator {
+    pub property: String,
+    pub mapping: BTreeMap<String, String>,
 }
 
 /// Validation finding for a DTO definition.
@@ -375,6 +412,95 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
                     ));
                 }
             }
+            DtoKind::ArrayAlias => {
+                // Array-alias requires items.
+                if dto.items.is_none() {
+                    out.push(DtoViolation::new(
+                        "dto-array-alias-requires-items",
+                        dto,
+                        "kind: \"array-alias\" requires items field".to_string(),
+                    ));
+                }
+                // Array-alias forbids projection fields.
+                if dto.base.is_some()
+                    || dto.pick.is_some()
+                    || dto.omit.is_some()
+                    || !dto.extras.is_empty()
+                    || dto.wrapper
+                    || dto.wraps.is_some()
+                    || dto.values.is_some()
+                    || dto.value_type.is_some()
+                {
+                    out.push(DtoViolation::new(
+                        "dto-array-alias-no-projection",
+                        dto,
+                        "kind: \"array-alias\" forbids base, pick, omit, extras, wrapper, wraps, values, value_type".to_string(),
+                    ));
+                }
+                // items must resolve to known DTO id or valid primitive.
+                if let Some(items_ref) = &dto.items {
+                    let is_primitive = matches!(items_ref.as_str(), "string" | "integer" | "number" | "boolean");
+                    let is_dto = items_ref.starts_with("dto:") && (seen_ids.contains(items_ref.as_str()) || dtos.iter().any(|d| d.id == *items_ref));
+                    if !is_primitive && !is_dto {
+                        out.push(DtoViolation::new(
+                            "dto-array-alias-items-resolves",
+                            dto,
+                            format!("items {:?} must be a valid primitive or known DTO id", items_ref),
+                        ));
+                    }
+                }
+            }
+            DtoKind::Union => {
+                // Union requires variants with ≥2 items.
+                if dto.variants.is_none() || dto.variants.as_ref().map_or(true, |v| v.len() < 2) {
+                    out.push(DtoViolation::new(
+                        "dto-union-requires-variants",
+                        dto,
+                        "kind: \"union\" requires variants with ≥2 items".to_string(),
+                    ));
+                }
+                // Union forbids projection fields.
+                if dto.base.is_some()
+                    || dto.pick.is_some()
+                    || dto.omit.is_some()
+                    || !dto.extras.is_empty()
+                    || dto.wrapper
+                    || dto.wraps.is_some()
+                    || dto.values.is_some()
+                    || dto.value_type.is_some()
+                    || dto.items.is_some()
+                {
+                    out.push(DtoViolation::new(
+                        "dto-union-no-projection",
+                        dto,
+                        "kind: \"union\" forbids base, pick, omit, extras, wrapper, wraps, values, value_type, items".to_string(),
+                    ));
+                }
+                // Each variant with ref must resolve to known DTO id.
+                if let Some(variants) = &dto.variants {
+                    for (i, var) in variants.iter().enumerate() {
+                        if let Some(ref_) = &var.ref_ {
+                            if !seen_ids.contains(ref_.as_str()) && !dtos.iter().any(|d| d.id == *ref_) {
+                                out.push(DtoViolation::new(
+                                    "dto-union-variant-resolves",
+                                    dto,
+                                    format!("variants[{}].ref {:?} does not resolve to a known DTO id", i, ref_),
+                                ));
+                            }
+                        }
+                    }
+                }
+                // discriminator only valid for union kind (checked globally below).
+            }
+        }
+
+        // discriminator field only allowed when kind=union.
+        if dto.discriminator.is_some() && dto.kind != DtoKind::Union {
+            out.push(DtoViolation::new(
+                "dto-discriminator-requires-union",
+                dto,
+                "discriminator only valid on kind: \"union\"".to_string(),
+            ));
         }
 
         // 6. accepted-state needs anchors or decision_refs.

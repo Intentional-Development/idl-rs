@@ -1,4 +1,11 @@
-# Changelog
+## [0.9.4] - 2025-01-20
+
+### Wave 17 Results
+- **TypeExpr DSL:** Prototype design complete, EBNF grammar covers all v0.1.6 kinds, round-trip lossless for type shape. Implementation path: `idl-rs/idl-typeexpr/` crate (W18+).
+- **Paginated Validation:** Corpus-2 validated (141 schemas: 112 Stripe cursor-based + 29 firefly-iii page-based). Pagination warrants `kind: "paginated"` in v0.1.7 (W18).
+- **Firefly-iii v0.1.6 Extraction:** Re-extracted with array-alias (24 schemas) + union (1 schema). DTO count 251 (24 NEW, not collapses). Conformance 99.6%/76.2% maintained. v0.1.6 extract/emit validated.
+- **All W16 unresolved items CLOSED:** TypeExpr designed, pagination validated, firefly-iii extracted.
+
 
 All notable changes to idl-rs will be documented in this file.
 

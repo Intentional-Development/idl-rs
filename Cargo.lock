@@ -696,6 +696,7 @@ dependencies = [
  "idl-graph",
  "idl-interview",
  "idl-llm",
+ "idl-typeexpr",
  "jsonschema",
  "predicates",
  "serde",

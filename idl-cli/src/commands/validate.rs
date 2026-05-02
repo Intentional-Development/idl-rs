@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use idl_graph::{default_constraints, Severity, ValidationReport};
 use serde::Serialize;
 
+use crate::diagnostic_formatter::format_message_with_dtos;
 use crate::graph_build::lift_document;
 
 #[derive(Serialize)]
@@ -121,14 +122,22 @@ fn print_human(
         report.infos.len()
     );
 
+    // For Phase 1, we format messages with an empty DTO list.
+    // When the validation pipeline produces DTO-aware errors, we'll pass
+    // the parsed DTOs here.
+    let dtos = vec![];
+
     for e in &report.errors {
-        println!("  ERROR  [{}] {}", e.rule, e.message);
+        let formatted_msg = format_message_with_dtos(&e.message, &dtos);
+        println!("  ERROR  [{}] {}", e.rule, formatted_msg);
     }
     for w in &report.warnings {
-        println!("  WARN   [{}] {}", w.rule, w.message);
+        let formatted_msg = format_message_with_dtos(&w.message, &dtos);
+        println!("  WARN   [{}] {}", w.rule, formatted_msg);
     }
     for i in &report.infos {
-        println!("  INFO   [{}] {}", i.rule, i.message);
+        let formatted_msg = format_message_with_dtos(&i.message, &dtos);
+        println!("  INFO   [{}] {}", i.rule, formatted_msg);
     }
 
     if !loss.lost_blocks.is_empty() {

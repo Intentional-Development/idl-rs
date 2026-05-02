@@ -13,6 +13,7 @@ use std::process::ExitCode;
 use tracing_subscriber::{fmt, EnvFilter};
 
 mod commands;
+mod diagnostic_formatter;
 mod graph_build;
 
 use commands::{change, emit, extract, init, interview, parse, validate, validate_schema, drift};

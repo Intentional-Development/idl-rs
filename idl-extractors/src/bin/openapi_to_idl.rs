@@ -329,7 +329,9 @@ fn definition_for_schema(name: &str, schema: &Value, operation_usage: &Operation
         return Some(Value::Object(def));
     }
 
-    None
+    // Regular object with properties - create standard object definition
+    let def = common_def(name, schema, "object", operation_usage);
+    Some(Value::Object(def))
 }
 
 fn extract_union_variants(items: &[Value]) -> Option<Vec<Value>> {

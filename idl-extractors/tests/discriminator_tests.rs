@@ -214,6 +214,56 @@ fn test_github_implicit_discriminator_detection() {
     assert_eq!(disc.mapping.get("creation"), Some(&"variant-0".to_string()));
 }
 
+/// W20 v0.1.8: Test propertyName-only discriminator extraction (GitHub check-runs pattern)
+#[test]
+fn test_propertyname_only_discriminator() {
+    // GitHub REST API check-runs pattern: discriminator without mapping
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "name": { "type": "string" },
+            "status": { "type": "string", "enum": ["queued", "in_progress", "completed"] }
+        },
+        "discriminator": {
+            "propertyName": "status"
+        },
+        "oneOf": [
+            {
+                "properties": { "status": { "enum": ["completed"] } },
+                "required": ["status", "conclusion"],
+                "additionalProperties": true
+            },
+            {
+                "properties": { "status": { "enum": ["queued", "in_progress"] } },
+                "additionalProperties": true
+            }
+        ]
+    });
+
+    let result = extract_discriminator(&schema);
+    assert!(result.is_some(), "Should extract propertyName-only discriminator");
+    
+    let disc = result.unwrap();
+    assert_eq!(
+        disc.get("property").and_then(Value::as_str),
+        Some("status"),
+        "Should extract propertyName as 'property'"
+    );
+    
+    // v0.1.8: mapping is optional, so it should NOT be present when source has no mapping
+    assert!(
+        disc.get("mapping").is_none(),
+        "Should NOT have mapping field when source has no mapping (propertyName-only pattern)"
+    );
+    
+    // mappingDerived should be false (default) when not synthesizing mapping
+    assert_eq!(
+        disc.get("mappingDerived").and_then(Value::as_bool).unwrap_or(false),
+        false,
+        "mappingDerived should be false for propertyName-only"
+    );
+}
+
 // Future v0.1.8 helper: infer discriminator from variant schemas
 struct InferredDiscriminator {
     property: String,

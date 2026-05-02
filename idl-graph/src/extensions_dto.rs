@@ -142,11 +142,16 @@ pub struct DtoVariant {
     pub array: bool,
 }
 
-/// Discriminator for a union DTO (Wave 16).
+/// Discriminator for a union DTO (Wave 16, v0.1.8 extension).
+/// v0.1.8: `mapping` is now optional (propertyName-only discriminators).
+/// `mapping_derived` indicates whether mapping was computed by extractor.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DtoDiscriminator {
     pub property: String,
-    pub mapping: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mapping: Option<BTreeMap<String, String>>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mapping_derived: bool,
 }
 
 /// Validation finding for a DTO definition.

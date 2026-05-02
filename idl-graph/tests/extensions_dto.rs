@@ -403,7 +403,8 @@ fn union_with_discriminator_round_trip() {
         ]),
         discriminator: Some(DtoDiscriminator {
             property: "type".into(),
-            mapping,
+            mapping: Some(mapping),
+            mapping_derived: false,
         }),
         cursor_field: None,
         has_more_field: None,

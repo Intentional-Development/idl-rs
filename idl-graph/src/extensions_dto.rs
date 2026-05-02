@@ -5,6 +5,10 @@
 //! live under `extensions.dto.definitions[]` and are referenced from
 //! `operation.props.accepts.dto` / `operation.props.returns.dto`.
 //!
+//! Wave 15 second pass: `kind` discriminator enables enum-only, map-only,
+//! unit, and object-projection DTOs. Backward compatible: absent `kind`
+//! defaults to `"object"`.
+//!
 //! This module owns:
 //!   1. The `DtoDefinition` shape (parsed from the JSON graph document).
 //!   2. `validate_dtos(graph) -> Vec<DtoViolation>` — semantic validation
@@ -19,15 +23,48 @@ use serde_json::Value;
 
 use crate::doc::{ConfidenceDoc, GraphDoc, SourceAnchorDoc};
 
+/// DTO kind discriminator. Determines the DTO shape and which fields are valid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DtoKind {
+    /// Entity-projection DTO. Projects from a `base` entity via pick/omit/extras.
+    Object,
+    /// Enum-only type. Declares a closed set of string literal values.
+    Enum,
+    /// Map-only type. Declares an object with dynamic keys and fixed value schema.
+    Map,
+    /// Unit/empty type. Declares an object with no properties.
+    Unit,
+}
+
+impl Default for DtoKind {
+    fn default() -> Self {
+        DtoKind::Object
+    }
+}
+
 /// Parsed DTO definition. Fields mirror the JSON shape under
 /// `extensions.dto.definitions[]` (see `IDL/schemas/semantic-graph.schema.json`
 /// `$defs/DtoDefinition`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DtoDefinition {
     pub id: String,
-    pub base: String,
+    #[serde(default, skip_serializing_if = "is_default_kind")]
+    pub kind: DtoKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
     pub state: String,
     pub created_by: String,
+    // Enum-kind fields
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub values: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_type: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nullable: bool,
+    // Object-kind fields
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub wrapper: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -40,12 +77,17 @@ pub struct DtoDefinition {
     pub required: Vec<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extras: BTreeMap<String, DtoExtra>,
+    // Common fields
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_anchors: Vec<SourceAnchorDoc>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub decision_refs: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<ConfidenceDoc>,
+}
+
+fn is_default_kind(k: &DtoKind) -> bool {
+    *k == DtoKind::Object
 }
 
 /// One entry under `DtoDefinition.extras`.
@@ -146,101 +188,190 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
             ));
         }
 
-        // 2. base must resolve to an existing entity.
-        let base_attrs = match entity_attrs.get(&dto.base) {
-            Some(s) => s,
-            None => {
-                out.push(DtoViolation::new(
-                    "dto-base-resolves",
-                    dto,
-                    format!("base {:?} does not resolve to an entity node", dto.base),
-                ));
-                continue;
-            }
-        };
-
-        // 3. pick/omit mutual exclusion (defensive — schema also enforces).
-        if dto.pick.is_some() && dto.omit.is_some() {
-            out.push(DtoViolation::new(
-                "dto-pick-omit-exclusive",
-                dto,
-                "pick and omit are mutually exclusive".to_string(),
-            ));
-        }
-
-        // 3a. wrapper DTO constraints.
-        if dto.wrapper {
-            if dto.wraps.is_none() {
-                out.push(DtoViolation::new(
-                    "dto-wrapper-requires-wraps",
-                    dto,
-                    "wrapper=true requires wraps field".to_string(),
-                ));
-            }
-            if dto.pick.is_some() || dto.omit.is_some() || !dto.extras.is_empty() {
-                out.push(DtoViolation::new(
-                    "dto-wrapper-no-projection",
-                    dto,
-                    "wrapper DTOs cannot have pick, omit, or extras".to_string(),
-                ));
-            }
-        }
-
-        // 3b. wraps must resolve to a known DTO.
-        if let Some(wraps_ref) = &dto.wraps {
-            if !seen_ids.contains(wraps_ref.as_str()) && !dtos.iter().any(|d| d.id == *wraps_ref) {
-                out.push(DtoViolation::new(
-                    "dto-wrapper-wraps-resolves",
-                    dto,
-                    format!("wraps {:?} does not resolve to a known DTO id", wraps_ref),
-                ));
-            }
-        }
-
-        // 4. pick/omit must be subsets of base attributes (skip for wrappers).
-        if let Some(pick) = &dto.pick {
-            for name in pick {
-                if !base_attrs.contains(name) {
+        // 2. Kind-specific validation.
+        match dto.kind {
+            DtoKind::Object => {
+                // Object-kind requires base.
+                let Some(base_ref) = &dto.base else {
                     out.push(DtoViolation::new(
-                        "dto-pick-subset",
+                        "dto-object-requires-base",
                         dto,
-                        format!(
-                            "pick field {:?} not present on base entity {} (available: {:?})",
-                            name,
-                            dto.base,
-                            base_attrs.iter().collect::<Vec<_>>()
-                        ),
+                        "kind: \"object\" requires base field".to_string(),
+                    ));
+                    continue;
+                };
+
+                // base must resolve to an existing entity.
+                let Some(base_attrs) = entity_attrs.get(base_ref) else {
+                    out.push(DtoViolation::new(
+                        "dto-base-resolves",
+                        dto,
+                        format!("base {:?} does not resolve to an entity node", base_ref),
+                    ));
+                    continue;
+                };
+
+                // pick/omit mutual exclusion (defensive — schema also enforces).
+                if dto.pick.is_some() && dto.omit.is_some() {
+                    out.push(DtoViolation::new(
+                        "dto-pick-omit-exclusive",
+                        dto,
+                        "pick and omit are mutually exclusive".to_string(),
+                    ));
+                }
+
+                // wrapper DTO constraints.
+                if dto.wrapper {
+                    if dto.wraps.is_none() {
+                        out.push(DtoViolation::new(
+                            "dto-wrapper-requires-wraps",
+                            dto,
+                            "wrapper=true requires wraps field".to_string(),
+                        ));
+                    }
+                    if dto.pick.is_some() || dto.omit.is_some() || !dto.extras.is_empty() {
+                        out.push(DtoViolation::new(
+                            "dto-wrapper-no-projection",
+                            dto,
+                            "wrapper DTOs cannot have pick, omit, or extras".to_string(),
+                        ));
+                    }
+                }
+
+                // wraps must resolve to a known DTO.
+                if let Some(wraps_ref) = &dto.wraps {
+                    if !seen_ids.contains(wraps_ref.as_str()) && !dtos.iter().any(|d| d.id == *wraps_ref) {
+                        out.push(DtoViolation::new(
+                            "dto-wrapper-wraps-resolves",
+                            dto,
+                            format!("wraps {:?} does not resolve to a known DTO id", wraps_ref),
+                        ));
+                    }
+                }
+
+                // pick/omit must be subsets of base attributes.
+                if let Some(pick) = &dto.pick {
+                    for name in pick {
+                        if !base_attrs.contains(name) {
+                            out.push(DtoViolation::new(
+                                "dto-pick-subset",
+                                dto,
+                                format!(
+                                    "pick field {:?} not present on base entity {} (available: {:?})",
+                                    name,
+                                    base_ref,
+                                    base_attrs.iter().collect::<Vec<_>>()
+                                ),
+                            ));
+                        }
+                    }
+                }
+                if let Some(omit) = &dto.omit {
+                    for name in omit {
+                        if !base_attrs.contains(name) {
+                            out.push(DtoViolation::new(
+                                "dto-omit-subset",
+                                dto,
+                                format!(
+                                    "omit field {:?} not present on base entity {}",
+                                    name, base_ref
+                                ),
+                            ));
+                        }
+                    }
+                }
+
+                // required ⊆ projected set.
+                let projected = compute_projected_fields(dto, base_attrs);
+                for req in &dto.required {
+                    if !projected.contains(req.as_str()) {
+                        out.push(DtoViolation::new(
+                            "dto-required-projected",
+                            dto,
+                            format!(
+                                "required field {:?} not in projected set {:?}",
+                                req,
+                                projected.iter().collect::<Vec<_>>()
+                            ),
+                        ));
+                    }
+                }
+            }
+            DtoKind::Enum => {
+                // Enum-kind requires values.
+                if dto.values.is_none() || dto.values.as_ref().map_or(true, |v| v.is_empty()) {
+                    out.push(DtoViolation::new(
+                        "dto-enum-requires-values",
+                        dto,
+                        "kind: \"enum\" requires values with ≥1 item".to_string(),
+                    ));
+                }
+                // Enum-kind forbids projection fields.
+                if dto.base.is_some()
+                    || dto.pick.is_some()
+                    || dto.omit.is_some()
+                    || !dto.extras.is_empty()
+                    || dto.wrapper
+                    || dto.wraps.is_some()
+                {
+                    out.push(DtoViolation::new(
+                        "dto-enum-no-projection",
+                        dto,
+                        "kind: \"enum\" forbids base, pick, omit, extras, wrapper, wraps".to_string(),
                     ));
                 }
             }
-        }
-        if let Some(omit) = &dto.omit {
-            for name in omit {
-                if !base_attrs.contains(name) {
+            DtoKind::Map => {
+                // Map-kind requires value_type.
+                if dto.value_type.is_none() {
                     out.push(DtoViolation::new(
-                        "dto-omit-subset",
+                        "dto-map-requires-value-type",
                         dto,
-                        format!(
-                            "omit field {:?} not present on base entity {}",
-                            name, dto.base
-                        ),
+                        "kind: \"map\" requires value_type".to_string(),
                     ));
                 }
-            }
-        }
-
-        // 5. required ⊆ projected ∪ extras (skip for wrappers).
-        if !dto.wrapper {
-            let projected = project_field_set(dto, base_attrs);
-            for name in &dto.required {
-                if !projected.contains(name) {
+                // Map-kind forbids projection fields.
+                if dto.base.is_some()
+                    || dto.pick.is_some()
+                    || dto.omit.is_some()
+                    || !dto.extras.is_empty()
+                    || dto.wrapper
+                    || dto.wraps.is_some()
+                {
                     out.push(DtoViolation::new(
-                        "dto-required-projected",
+                        "dto-map-no-projection",
                         dto,
-                        format!(
-                            "required field {:?} is not in the projected set (pick/omit + extras)",
-                            name
-                        ),
+                        "kind: \"map\" forbids base, pick, omit, extras, wrapper, wraps".to_string(),
+                    ));
+                }
+                // value_type must resolve to known DTO id or valid primitive.
+                if let Some(vt) = &dto.value_type {
+                    let is_primitive = matches!(vt.as_str(), "string" | "integer" | "number" | "boolean");
+                    let is_dto = vt.starts_with("dto:") && (seen_ids.contains(vt.as_str()) || dtos.iter().any(|d| d.id == *vt));
+                    if !is_primitive && !is_dto {
+                        out.push(DtoViolation::new(
+                            "dto-map-value-type-resolves",
+                            dto,
+                            format!("value_type {:?} must be a valid primitive or known DTO id", vt),
+                        ));
+                    }
+                }
+            }
+            DtoKind::Unit => {
+                // Unit-kind forbids all projection and schema fields.
+                if dto.base.is_some()
+                    || dto.pick.is_some()
+                    || dto.omit.is_some()
+                    || !dto.extras.is_empty()
+                    || dto.wrapper
+                    || dto.wraps.is_some()
+                    || dto.values.is_some()
+                    || dto.value_type.is_some()
+                {
+                    out.push(DtoViolation::new(
+                        "dto-unit-no-fields",
+                        dto,
+                        "kind: \"unit\" forbids base, pick, omit, extras, wrapper, wraps, values, value_type".to_string(),
                     ));
                 }
             }
@@ -288,7 +419,8 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
 }
 
 /// Compute the projected field set for emitter use: `(base ∖ omit) ∩ pick ∪ extras`.
-pub fn project_field_set(
+/// Used for validation to ensure `required ⊆ projected`.
+pub fn compute_projected_fields(
     dto: &DtoDefinition,
     base_attrs: &BTreeSet<String>,
 ) -> BTreeSet<String> {
@@ -304,6 +436,15 @@ pub fn project_field_set(
         out.insert(k.clone());
     }
     out
+}
+
+/// Legacy alias for backward compatibility.
+#[deprecated(since = "0.1.5", note = "Use `compute_projected_fields` instead")]
+pub fn project_field_set(
+    dto: &DtoDefinition,
+    base_attrs: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    compute_projected_fields(dto, base_attrs)
 }
 
 /// Convenience for the emitter: returns the ordered projected attribute
@@ -492,5 +633,232 @@ mod tests {
             .filter(|v| v.dto_id == "dto:UserResponse")
             .collect();
         assert!(wrapper_violations.is_empty(), "Expected no violations, got: {:?}", wrapper_violations);
+    }
+
+    #[test]
+    fn test_enum_kind_requires_values() {
+        let graph = serde_json::from_value(json!({
+            "version": "0.1.5",
+            "nodes": [],
+            "edges": [],
+            "extensions": {
+                "dto": {
+                    "definitions": [
+                        {
+                            "id": "dto:DeviceType",
+                            "kind": "enum",
+                            "state": "proposed",
+                            "created_by": "ai"
+                        }
+                    ]
+                }
+            }
+        })).unwrap();
+
+        let violations = validate_dtos(&graph);
+        assert!(violations.iter().any(|v| v.rule == "dto-enum-requires-values"));
+    }
+
+    #[test]
+    fn test_enum_kind_forbids_projection() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:DeviceType",
+                        "kind": "enum",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "values": ["mobile", "desktop"],
+                        "base": "entity:user"
+                    }
+                ]
+            }
+        }));
+
+        let violations = validate_dtos(&graph);
+        assert!(violations.iter().any(|v| v.rule == "dto-enum-no-projection"));
+    }
+
+    #[test]
+    fn test_valid_enum_kind() {
+        let graph = serde_json::from_value(json!({
+            "version": "0.1.5",
+            "nodes": [],
+            "edges": [],
+            "extensions": {
+                "dto": {
+                    "definitions": [
+                        {
+                            "id": "dto:DeviceType",
+                            "kind": "enum",
+                            "state": "proposed",
+                            "created_by": "ai",
+                            "values": ["mobile", "desktop", "web"]
+                        }
+                    ]
+                }
+            }
+        })).unwrap();
+
+        let violations = validate_dtos(&graph);
+        let enum_violations: Vec<_> = violations.iter()
+            .filter(|v| v.dto_id == "dto:DeviceType")
+            .collect();
+        assert!(enum_violations.is_empty(), "Expected no violations, got: {:?}", enum_violations);
+    }
+
+    #[test]
+    fn test_map_kind_requires_value_type() {
+        let graph = serde_json::from_value(json!({
+            "version": "0.1.5",
+            "nodes": [],
+            "edges": [],
+            "extensions": {
+                "dto": {
+                    "definitions": [
+                        {
+                            "id": "dto:PrepareUploadResponse",
+                            "kind": "map",
+                            "state": "proposed",
+                            "created_by": "ai"
+                        }
+                    ]
+                }
+            }
+        })).unwrap();
+
+        let violations = validate_dtos(&graph);
+        assert!(violations.iter().any(|v| v.rule == "dto-map-requires-value-type"));
+    }
+
+    #[test]
+    fn test_map_kind_forbids_projection() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:PrepareUploadResponse",
+                        "kind": "map",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "value_type": "string",
+                        "base": "entity:user"
+                    }
+                ]
+            }
+        }));
+
+        let violations = validate_dtos(&graph);
+        assert!(violations.iter().any(|v| v.rule == "dto-map-no-projection"));
+    }
+
+    #[test]
+    fn test_valid_map_kind() {
+        let graph = serde_json::from_value(json!({
+            "version": "0.1.5",
+            "nodes": [],
+            "edges": [],
+            "extensions": {
+                "dto": {
+                    "definitions": [
+                        {
+                            "id": "dto:PrepareUploadResponse",
+                            "kind": "map",
+                            "state": "proposed",
+                            "created_by": "ai",
+                            "value_type": "string"
+                        }
+                    ]
+                }
+            }
+        })).unwrap();
+
+        let violations = validate_dtos(&graph);
+        let map_violations: Vec<_> = violations.iter()
+            .filter(|v| v.dto_id == "dto:PrepareUploadResponse")
+            .collect();
+        assert!(map_violations.is_empty(), "Expected no violations, got: {:?}", map_violations);
+    }
+
+    #[test]
+    fn test_unit_kind_forbids_all_fields() {
+        let graph = serde_json::from_value(json!({
+            "version": "0.1.5",
+            "nodes": [],
+            "edges": [],
+            "extensions": {
+                "dto": {
+                    "definitions": [
+                        {
+                            "id": "dto:EmptyPayload",
+                            "kind": "unit",
+                            "state": "proposed",
+                            "created_by": "ai",
+                            "values": ["should", "not", "be", "here"]
+                        }
+                    ]
+                }
+            }
+        })).unwrap();
+
+        let violations = validate_dtos(&graph);
+        assert!(violations.iter().any(|v| v.rule == "dto-unit-no-fields"));
+    }
+
+    #[test]
+    fn test_valid_unit_kind() {
+        let graph = serde_json::from_value(json!({
+            "version": "0.1.5",
+            "nodes": [],
+            "edges": [],
+            "extensions": {
+                "dto": {
+                    "definitions": [
+                        {
+                            "id": "dto:EmptyPayload",
+                            "kind": "unit",
+                            "state": "proposed",
+                            "created_by": "ai"
+                        }
+                    ]
+                }
+            }
+        })).unwrap();
+
+        let violations = validate_dtos(&graph);
+        let unit_violations: Vec<_> = violations.iter()
+            .filter(|v| v.dto_id == "dto:EmptyPayload")
+            .collect();
+        assert!(unit_violations.is_empty(), "Expected no violations, got: {:?}", unit_violations);
+    }
+
+    #[test]
+    fn test_backward_compat_object_kind_implicit() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:User",
+                        "base": "entity:user",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "pick": ["email", "username"]
+                    }
+                ]
+            }
+        }));
+
+        let dtos = parse_dtos(&graph).unwrap();
+        assert_eq!(dtos[0].kind, DtoKind::Object, "Absent kind should default to Object");
+        
+        let violations = validate_dtos(&graph);
+        let dto_violations: Vec<_> = violations.iter()
+            .filter(|v| v.dto_id == "dto:User")
+            .collect();
+        assert!(dto_violations.is_empty(), "Expected no violations for backward-compat DTO, got: {:?}", dto_violations);
     }
 }

@@ -32,8 +32,8 @@ pub use drift::{
     DriftEvent, DriftReport, DriftSeverity, PropChange,
 };
 pub use extensions_dto::{
-    parse_dtos, project_field_set, projected_fields_ordered, validate_dtos, DtoDefinition,
-    DtoExtra, DtoViolation, ProjectedField,
+    parse_dtos, project_field_set, projected_fields_ordered, validate_dtos, compute_projected_fields,
+    DtoDefinition, DtoExtra, DtoKind, DtoViolation, ProjectedField,
 };
 pub use extensions_when::{parse_when, When, WhenStructured, WhenVar};
 

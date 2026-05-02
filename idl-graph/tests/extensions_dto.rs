@@ -1,7 +1,8 @@
 //! Wave 12 — DTO extension namespace tests (RFC dto-node-kind, Direction C).
 
 use idl_graph::{
-    parse_dtos, project_field_set, validate_dtos, DtoDefinition, DtoExtra, GraphDoc, NodeDoc,
+    extensions_dto::{parse_dtos, project_field_set, validate_dtos, DtoDefinition, DtoExtra, DtoKind},
+    GraphDoc, NodeDoc,
 };
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -255,9 +256,14 @@ fn project_field_set_omit_plus_extras() {
     use std::collections::BTreeSet;
     let dto = DtoDefinition {
         id: "dto:X".into(),
-        base: "entity:user".into(),
+        kind: DtoKind::Object,
+        base: Some("entity:user".into()),
         state: "proposed".into(),
         created_by: "ai".into(),
+        values: None,
+        value_type: None,
+        key_type: None,
+        nullable: false,
         wrapper: false,
         wraps: None,
         pick: None,
@@ -279,6 +285,7 @@ fn project_field_set_omit_plus_extras() {
         .iter()
         .map(|s| s.to_string())
         .collect();
+    #[allow(deprecated)]
     let projected = project_field_set(&dto, &base);
     let want: BTreeSet<String> =
         ["email", "username", "bio", "image", "token"].iter().map(|s| s.to_string()).collect();

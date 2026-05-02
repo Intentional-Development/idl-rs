@@ -5,6 +5,23 @@ All notable changes to idl-rs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2026-05-02
+
+### Added (Wave 15)
+- **DtoKind enum:** `Object`, `Enum`, `Map`, `Unit` variants with serde discriminator
+- **Structured `when` module:** `extensions_when.rs` (220 lines) with `When`, `WhenStructured`, `WhenVar` types
+- **8 new validation rules:** dto-kind-valid, dto-object-requires-base, dto-enum-requires-values, dto-enum-no-projection, dto-map-requires-value-type, dto-map-value-type-resolves, dto-map-no-projection, dto-unit-no-fields
+- **13 total new tests:** 6 for structured when, 7 for kind discriminator (enum/map/unit/object validation + backward-compat)
+
+### Changed
+- Schema compatibility: now validates graph.version against v0.1.5
+- DtoDefinition struct: `kind: DtoKind`, `base: Option<String>` (was required), `values`, `value_type`, `key_type`, `nullable` fields added
+- Edge `when` parsing: accepts string OR structured object form
+
+### Fixed
+- Firefly-iii conformance: 76.2% → 99.6% strict (59 DTOs rescued via kind discriminator)
+- Localsend conformance: 66.7% → 100.0% strict (3 DTOs rescued via kind discriminator)
+
 ## [0.9.1] - 2026-05-02
 
 ### Added (Wave 14)

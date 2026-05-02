@@ -1,3 +1,8 @@
+## [v0.9.5] - 2026-05-02
+
+- Wave 18 release: Schema v0.1.7 (paginated kind), TypeExpr crate, Discriminator corpus validated
+
+
 ## [0.9.4] - 2025-01-20
 
 ### Wave 17 Results

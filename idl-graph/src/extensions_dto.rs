@@ -28,6 +28,10 @@ pub struct DtoDefinition {
     pub base: String,
     pub state: String,
     pub created_by: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub wrapper: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wraps: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pick: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -164,7 +168,36 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
             ));
         }
 
-        // 4. pick/omit must be subsets of base attributes.
+        // 3a. wrapper DTO constraints.
+        if dto.wrapper {
+            if dto.wraps.is_none() {
+                out.push(DtoViolation::new(
+                    "dto-wrapper-requires-wraps",
+                    dto,
+                    "wrapper=true requires wraps field".to_string(),
+                ));
+            }
+            if dto.pick.is_some() || dto.omit.is_some() || !dto.extras.is_empty() {
+                out.push(DtoViolation::new(
+                    "dto-wrapper-no-projection",
+                    dto,
+                    "wrapper DTOs cannot have pick, omit, or extras".to_string(),
+                ));
+            }
+        }
+
+        // 3b. wraps must resolve to a known DTO.
+        if let Some(wraps_ref) = &dto.wraps {
+            if !seen_ids.contains(wraps_ref.as_str()) && !dtos.iter().any(|d| d.id == *wraps_ref) {
+                out.push(DtoViolation::new(
+                    "dto-wrapper-wraps-resolves",
+                    dto,
+                    format!("wraps {:?} does not resolve to a known DTO id", wraps_ref),
+                ));
+            }
+        }
+
+        // 4. pick/omit must be subsets of base attributes (skip for wrappers).
         if let Some(pick) = &dto.pick {
             for name in pick {
                 if !base_attrs.contains(name) {
@@ -196,18 +229,20 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
             }
         }
 
-        // 5. required ⊆ projected ∪ extras.
-        let projected = project_field_set(dto, base_attrs);
-        for name in &dto.required {
-            if !projected.contains(name) {
-                out.push(DtoViolation::new(
-                    "dto-required-projected",
-                    dto,
-                    format!(
-                        "required field {:?} is not in the projected set (pick/omit + extras)",
-                        name
-                    ),
-                ));
+        // 5. required ⊆ projected ∪ extras (skip for wrappers).
+        if !dto.wrapper {
+            let projected = project_field_set(dto, base_attrs);
+            for name in &dto.required {
+                if !projected.contains(name) {
+                    out.push(DtoViolation::new(
+                        "dto-required-projected",
+                        dto,
+                        format!(
+                            "required field {:?} is not in the projected set (pick/omit + extras)",
+                            name
+                        ),
+                    ));
+                }
             }
         }
 
@@ -323,4 +358,139 @@ pub struct ProjectedField {
     pub nullable: bool,
     pub format: Option<String>,
     pub from_extras: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn minimal_graph_with_user_entity() -> GraphDoc {
+        serde_json::from_value(json!({
+            "version": "0.1.3",
+            "nodes": [
+                {
+                    "id": "entity:user",
+                    "kind": "entity",
+                    "state": "accepted",
+                    "created_by": "human",
+                    "props": {
+                        "name": "user",
+                        "attributes": [
+                            {"name": "email", "type": "string"},
+                            {"name": "username", "type": "string"}
+                        ]
+                    },
+                    "source_anchors": [{"uri": "test://user"}]
+                }
+            ],
+            "edges": []
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn test_wrapper_dto_requires_wraps() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:UserResponse",
+                        "base": "entity:user",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "wrapper": true
+                    }
+                ]
+            }
+        }));
+
+        let violations = validate_dtos(&graph);
+        assert!(violations.iter().any(|v| v.rule == "dto-wrapper-requires-wraps"));
+    }
+
+    #[test]
+    fn test_wrapper_dto_cannot_have_pick_omit_extras() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:User",
+                        "base": "entity:user",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "pick": ["email"]
+                    },
+                    {
+                        "id": "dto:UserResponse",
+                        "base": "entity:user",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "wrapper": true,
+                        "wraps": "dto:User",
+                        "pick": ["email"]
+                    }
+                ]
+            }
+        }));
+
+        let violations = validate_dtos(&graph);
+        assert!(violations.iter().any(|v| v.rule == "dto-wrapper-no-projection"));
+    }
+
+    #[test]
+    fn test_wrapper_dto_wraps_must_resolve() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:UserResponse",
+                        "base": "entity:user",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "wrapper": true,
+                        "wraps": "dto:NonExistent"
+                    }
+                ]
+            }
+        }));
+
+        let violations = validate_dtos(&graph);
+        assert!(violations.iter().any(|v| v.rule == "dto-wrapper-wraps-resolves"));
+    }
+
+    #[test]
+    fn test_valid_wrapper_dto() {
+        let mut graph = minimal_graph_with_user_entity();
+        graph.extensions = Some(json!({
+            "dto": {
+                "definitions": [
+                    {
+                        "id": "dto:User",
+                        "base": "entity:user",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "pick": ["email", "username"]
+                    },
+                    {
+                        "id": "dto:UserResponse",
+                        "base": "entity:user",
+                        "state": "proposed",
+                        "created_by": "ai",
+                        "wrapper": true,
+                        "wraps": "dto:User"
+                    }
+                ]
+            }
+        }));
+
+        let violations = validate_dtos(&graph);
+        let wrapper_violations: Vec<_> = violations.iter()
+            .filter(|v| v.dto_id == "dto:UserResponse")
+            .collect();
+        assert!(wrapper_violations.is_empty(), "Expected no violations, got: {:?}", wrapper_violations);
+    }
 }

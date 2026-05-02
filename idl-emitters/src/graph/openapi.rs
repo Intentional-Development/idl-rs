@@ -219,6 +219,36 @@ impl GraphEmitter for OpenApiEmitter {
             let _ = writeln!(s, "    # GENERATED_FROM {} (base {})", dto.id, dto.base);
             let _ = writeln!(s, "    {name}:");
             let _ = writeln!(s, "      type: object");
+            
+            // Wave 14: wrapper DTOs.
+            if dto.wrapper {
+                if let Some(wraps_ref) = &dto.wraps {
+                    let wrapped_name = dto_name(wraps_ref);
+                    // Property name is lowercase wrapped DTO name, optionally pluralized.
+                    // SingleArticleResponse -> article, MultipleArticlesResponse -> articles.
+                    let is_array = name.starts_with("Multiple") || name.contains("Comments") || name == "TagsResponse";
+                    let prop_name = if is_array {
+                        format!("{}s", wrapped_name.to_lowercase())
+                    } else {
+                        wrapped_name.to_lowercase()
+                    };
+                    let _ = writeln!(s, "      required:");
+                    let _ = writeln!(s, "        - {prop_name}");
+                    let _ = writeln!(s, "      properties:");
+                    let _ = writeln!(s, "        {prop_name}:");
+                    if is_array {
+                        let _ = writeln!(s, "          type: array");
+                        let _ = writeln!(s, "          items:");
+                        let _ = writeln!(s, "            $ref: '#/components/schemas/{wrapped_name}'");
+                    } else {
+                        let _ = writeln!(s, "          $ref: '#/components/schemas/{wrapped_name}'");
+                    }
+                }
+                entity_count += 1;
+                continue;
+            }
+            
+            // Standard DTO projection.
             let base_attrs_arr: Vec<serde_json::Value> = entity_by_id
                 .get(&dto.base)
                 .and_then(|n| n.props.get("attributes"))

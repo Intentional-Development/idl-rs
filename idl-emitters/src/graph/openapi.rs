@@ -265,6 +265,12 @@ impl GraphEmitter for OpenApiEmitter {
                     entity_count += 1;
                     continue;
                 }
+                DtoKind::Paginated => {
+                    // Emit paginated DTOs as objects with array data field
+                    let _ = writeln!(s, "      type: object");
+                    entity_count += 1;
+                    continue;
+                }
                 DtoKind::Union => {
                     let _ = writeln!(s, "      oneOf:");
                     for variant in dto.variants.as_deref().unwrap_or(&[]) {

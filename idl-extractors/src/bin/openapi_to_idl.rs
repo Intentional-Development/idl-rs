@@ -186,6 +186,31 @@ fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
         }
     }
 
+    // W19: discriminator without oneOf — Azure OpenAI pattern
+    // Schema has discriminator + mapping but no oneOf (variants use allOf to inherit)
+    if let Some(disc) = extract_discriminator(schema) {
+        // Even if mapping is empty or missing, we can still create a union if we have a discriminator
+        let mapping = disc.get("mapping").and_then(Value::as_object);
+        let mut variants = Vec::new();
+        
+        if let Some(mapping) = mapping {
+            // Extract variants from discriminator mapping
+            for (_key, target) in mapping {
+                if let Some(dto_ref) = target.as_str() {
+                    variants.push(json!({"ref": dto_ref}));
+                }
+            }
+        }
+        
+        // If we have variants from the mapping, create a union
+        if !variants.is_empty() {
+            let mut def = common_def(name, schema, "union");
+            def.insert("variants".into(), Value::Array(variants));
+            def.insert("discriminator".into(), disc);
+            return Some(Value::Object(def));
+        }
+    }
+
     // v0.1.6: union — check for oneOf/anyOf
     if let Some(one_of) = schema.get("oneOf").and_then(Value::as_array) {
         if let Some(variants) = extract_union_variants(one_of) {

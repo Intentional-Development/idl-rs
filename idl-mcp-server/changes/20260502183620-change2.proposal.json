@@ -1,0 +1,22 @@
+{
+  "version": "0.1.0",
+  "id": "20260502183620-change2",
+  "author": "agent-2",
+  "target_graph": "/var/folders/vw/45rjqvhd78x9y3n2q6454y0w0000gn/T/.tmpFExKSl/test.graph.json",
+  "rationale": "Change 2",
+  "diff_ops": [
+    {
+      "op": "modify_dto_field",
+      "dto_id": "dto-user",
+      "field_name": "field2",
+      "action": "add",
+      "field_data": {
+        "name": "field2",
+        "type": "string"
+      }
+    }
+  ],
+  "status": "accepted",
+  "created_at": "2026-05-02T18:36:20.638246Z",
+  "updated_at": "2026-05-02T18:36:20.651351Z"
+}

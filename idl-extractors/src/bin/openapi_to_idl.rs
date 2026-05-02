@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Map, Value};
-use std::{collections::BTreeMap, env, fs, path::PathBuf};
+use std::{collections::{BTreeMap, HashSet}, env, fs, path::PathBuf};
 
 fn main() -> Result<()> {
     let args = Args::parse()?;
@@ -12,7 +12,7 @@ fn main() -> Result<()> {
         .with_context(|| format!("read base graph {}", args.base_graph.display()))?;
     let mut graph: Value = serde_json::from_str(&base_text).context("parse base graph JSON")?;
 
-    graph["version"] = Value::String("0.1.7".into());
+    graph["version"] = Value::String("0.1.9".into());
     graph
         .get_mut("metadata")
         .and_then(Value::as_object_mut)
@@ -20,7 +20,7 @@ fn main() -> Result<()> {
         .extend([
             (
                 "extractor".into(),
-                Value::String("idl-extractors/openapi_to_idl@0.1.6".into()),
+                Value::String("idl-extractors/openapi_to_idl@0.1.9".into()),
             ),
             ("source_openapi".into(), Value::String(args.spec.display().to_string())),
         ]);
@@ -58,12 +58,65 @@ fn main() -> Result<()> {
         }
     }
 
+    // W22 TASK A: Extract nested schemas from paths (request/response bodies)
+    let mut nested_count = 0;
+    if let Some(paths) = spec.pointer("/paths").and_then(Value::as_object) {
+        for (_path, methods) in paths {
+            if let Some(methods_obj) = methods.as_object() {
+                for (method, details) in methods_obj {
+                    if !["get", "post", "put", "patch", "delete"].contains(&method.as_str()) {
+                        continue;
+                    }
+                    if let Some(details_obj) = details.as_object() {
+                        // Extract from requestBody
+                        if let Some(content) = details_obj
+                            .get("requestBody")
+                            .and_then(|rb| rb.get("content"))
+                            .and_then(Value::as_object)
+                        {
+                            for schema_info in content.values() {
+                                if let Some(schema) = schema_info.get("schema") {
+                                    if let Some((name, def)) = extract_nested_schema(schema, schemas) {
+                                        if !by_name.contains_key(&name) {
+                                            by_name.insert(name, def);
+                                            nested_count += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Extract from responses
+                        if let Some(responses) = details_obj.get("responses").and_then(Value::as_object) {
+                            for response in responses.values() {
+                                if let Some(content) = response.get("content").and_then(Value::as_object) {
+                                    for schema_info in content.values() {
+                                        if let Some(schema) = schema_info.get("schema") {
+                                            if let Some((name, def)) = extract_nested_schema(schema, schemas) {
+                                                if !by_name.contains_key(&name) {
+                                                    by_name.insert(name, def);
+                                                    nested_count += 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // W22 TASK B: Build operation usage map for behavior classification
+    let operation_usage = build_operation_usage(&spec);
+
     let mut skipped: Vec<String> = Vec::new();
     for (name, schema) in schemas {
         if by_name.contains_key(name) {
             continue;
         }
-        if let Some(def) = definition_for_schema(name, schema) {
+        if let Some(def) = definition_for_schema(name, schema, &operation_usage) {
             by_name.insert(name.clone(), def);
         } else {
             skipped.push(name.clone());
@@ -80,6 +133,7 @@ fn main() -> Result<()> {
         .extend([
             ("openapi_schema_count".into(), json!(schemas.len())),
             ("openapi_schema_skipped".into(), json!(skipped)),
+            ("nested_schemas_extracted".into(), json!(nested_count)),
         ]);
 
     let pretty = serde_json::to_string_pretty(&graph).context("serialize output graph")?;
@@ -118,7 +172,7 @@ impl Args {
     }
 }
 
-fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
+fn definition_for_schema(name: &str, schema: &Value, operation_usage: &OperationUsage) -> Option<Value> {
     // v0.1.7: paginated — check for paginated list pattern (data: array<T> + metadata)
     if let Some(props) = schema.get("properties").and_then(Value::as_object) {
         if let Some(data_prop) = props.get("data") {
@@ -135,7 +189,7 @@ fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
                                 || props.contains_key("object");
                             
                             if has_pagination_metadata {
-                                let mut def = common_def(name, schema, "paginated");
+                                let mut def = common_def(name, schema, "paginated", operation_usage);
                                 def.insert("items".into(), Value::String(format!("dto:{item_name}")));
                                 
                                 // Extract pagination metadata fields
@@ -178,7 +232,7 @@ fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
         if let Some(items) = schema.get("items") {
             if let Some(ref_val) = items.get("$ref").and_then(Value::as_str) {
                 if let Some(item_name) = ref_val.strip_prefix("#/components/schemas/") {
-                    let mut def = common_def(name, schema, "array-alias");
+                    let mut def = common_def(name, schema, "array-alias", operation_usage);
                     def.insert("items".into(), Value::String(format!("dto:{item_name}")));
                     return Some(Value::Object(def));
                 }
@@ -204,7 +258,7 @@ fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
         
         // If we have variants from the mapping, create a union
         if !variants.is_empty() {
-            let mut def = common_def(name, schema, "union");
+            let mut def = common_def(name, schema, "union", operation_usage);
             def.insert("variants".into(), Value::Array(variants));
             def.insert("discriminator".into(), disc);
             return Some(Value::Object(def));
@@ -214,7 +268,7 @@ fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
     // v0.1.6: union — check for oneOf/anyOf
     if let Some(one_of) = schema.get("oneOf").and_then(Value::as_array) {
         if let Some(variants) = extract_union_variants(one_of) {
-            let mut def = common_def(name, schema, "union");
+            let mut def = common_def(name, schema, "union", operation_usage);
             def.insert("variants".into(), Value::Array(variants));
             if let Some(disc) = extract_discriminator(schema) {
                 def.insert("discriminator".into(), disc);
@@ -224,7 +278,7 @@ fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
     }
     if let Some(any_of) = schema.get("anyOf").and_then(Value::as_array) {
         if let Some(variants) = extract_union_variants(any_of) {
-            let mut def = common_def(name, schema, "union");
+            let mut def = common_def(name, schema, "union", operation_usage);
             def.insert("variants".into(), Value::Array(variants));
             if let Some(disc) = extract_discriminator(schema) {
                 def.insert("discriminator".into(), disc);
@@ -247,7 +301,7 @@ fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
         if strings.is_empty() {
             return None;
         }
-        let mut def = common_def(name, schema, "enum");
+        let mut def = common_def(name, schema, "enum", operation_usage);
         def.insert("values".into(), Value::Array(strings));
         def.insert(
             "value_type".into(),
@@ -265,13 +319,13 @@ fn definition_for_schema(name: &str, schema: &Value) -> Option<Value> {
         .map_or(true, Map::is_empty);
     if props_empty {
         if let Some(additional) = schema.get("additionalProperties") {
-            let mut def = common_def(name, schema, "map");
+            let mut def = common_def(name, schema, "map", operation_usage);
             def.insert("key_type".into(), Value::String("string".into()));
             def.insert("value_type".into(), Value::String(schema_value_type(additional)));
             return Some(Value::Object(def));
         }
 
-        let def = common_def(name, schema, "unit");
+        let def = common_def(name, schema, "unit", operation_usage);
         return Some(Value::Object(def));
     }
 
@@ -318,7 +372,7 @@ fn extract_discriminator(schema: &Value) -> Option<Value> {
     Some(Value::Object(result))
 }
 
-fn common_def(name: &str, _schema: &Value, kind: &str) -> Map<String, Value> {
+fn common_def(name: &str, schema: &Value, kind: &str, operation_usage: &OperationUsage) -> Map<String, Value> {
     let mut def = Map::new();
     def.insert("id".into(), Value::String(format!("dto:{name}")));
     def.insert("kind".into(), Value::String(kind.into()));
@@ -328,9 +382,19 @@ fn common_def(name: &str, _schema: &Value, kind: &str) -> Map<String, Value> {
         "source_anchors".into(),
         json!([{ "uri": format!("repo://IDL/conformance/firefly-iii/canonical/openapi.yaml#/components/schemas/{name}") }]),
     );
+    
+    // W22 TASK B: Classify behavior based on heuristics
+    let behavior = classify_behavior(name, schema, kind, operation_usage);
+    
     def.insert(
         "confidence".into(),
-        json!({ "score": 1.0, "model": "idl-extractors/openapi_to_idl" }),
+        json!({ 
+            "score": 1.0, 
+            "model": "idl-extractors/openapi_to_idl@0.1.9",
+            "metadata": {
+                "behavior": behavior
+            }
+        }),
     );
     def
 }
@@ -356,4 +420,190 @@ fn value_to_literal(value: &Value) -> String {
         Value::String(v) => v.clone(),
         other => other.to_string(),
     }
+}
+
+// W22 TASK A: Extract nested schema from path operation
+fn extract_nested_schema(schema: &Value, all_schemas: &serde_json::Map<String, Value>) -> Option<(String, Value)> {
+    // Check if this is a $ref to a schema
+    if let Some(ref_str) = schema.get("$ref").and_then(Value::as_str) {
+        if let Some(name) = ref_str.strip_prefix("#/components/schemas/") {
+            // Check if this schema has discriminator (our target for W22 Task A)
+            if let Some(target_schema) = all_schemas.get(name) {
+                if has_discriminator_or_polymorphic(target_schema) {
+                    // This is a nested discriminator - we want to extract it
+                    if let Some(def) = definition_for_schema(name, target_schema, &OperationUsage::default()) {
+                        return Some((name.to_string(), def));
+                    }
+                }
+            }
+        }
+    }
+    
+    // Check inline oneOf/anyOf/allOf
+    for key in &["oneOf", "anyOf", "allOf"] {
+        if schema.get(*key).is_some() && has_discriminator_or_polymorphic(schema) {
+            // Generate a name for this inline schema
+            // For now, skip inline schemas (they need parent context for naming)
+        }
+    }
+    
+    None
+}
+
+fn has_discriminator_or_polymorphic(schema: &Value) -> bool {
+    schema.get("discriminator").is_some()
+        || schema.get("oneOf").is_some()
+        || schema.get("anyOf").is_some()
+}
+
+// W22 TASK B: Build operation usage map for behavior classification
+struct OperationUsage {
+    read_operations: HashSet<String>,
+    write_operations: HashSet<String>,
+    mutation_operations: HashSet<String>,
+}
+
+impl Default for OperationUsage {
+    fn default() -> Self {
+        Self {
+            read_operations: HashSet::new(),
+            write_operations: HashSet::new(),
+            mutation_operations: HashSet::new(),
+        }
+    }
+}
+
+fn build_operation_usage(spec: &Value) -> OperationUsage {
+    let mut usage = OperationUsage::default();
+    
+    if let Some(paths) = spec.pointer("/paths").and_then(Value::as_object) {
+        for methods in paths.values() {
+            if let Some(methods_obj) = methods.as_object() {
+                for (method, details) in methods_obj {
+                    let method_str = method.as_str().to_lowercase();
+                    
+                    // Collect schema names from request/response bodies
+                    let mut schemas_in_op = HashSet::new();
+                    
+                    // From requestBody
+                    if let Some(content) = details.get("requestBody")
+                        .and_then(|rb| rb.get("content"))
+                        .and_then(Value::as_object)
+                    {
+                        for schema_info in content.values() {
+                            if let Some(ref_str) = schema_info.get("schema")
+                                .and_then(|s| s.get("$ref"))
+                                .and_then(Value::as_str)
+                            {
+                                if let Some(name) = ref_str.strip_prefix("#/components/schemas/") {
+                                    schemas_in_op.insert(name.to_string());
+                                }
+                            }
+                        }
+                    }
+                    
+                    // From responses
+                    if let Some(responses) = details.get("responses").and_then(Value::as_object) {
+                        for response in responses.values() {
+                            if let Some(content) = response.get("content").and_then(Value::as_object) {
+                                for schema_info in content.values() {
+                                    if let Some(ref_str) = schema_info.get("schema")
+                                        .and_then(|s| s.get("$ref"))
+                                        .and_then(Value::as_str)
+                                    {
+                                        if let Some(name) = ref_str.strip_prefix("#/components/schemas/") {
+                                            schemas_in_op.insert(name.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Categorize operations
+                    for schema_name in schemas_in_op {
+                        match method_str.as_str() {
+                            "get" | "head" | "options" => {
+                                usage.read_operations.insert(schema_name.clone());
+                            }
+                            "post" => {
+                                usage.write_operations.insert(schema_name.clone());
+                            }
+                            "put" | "patch" | "delete" => {
+                                usage.mutation_operations.insert(schema_name.clone());
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    usage
+}
+
+// W22 TASK B: Classify DTO behavior based on heuristics
+fn classify_behavior(name: &str, schema: &Value, kind: &str, operation_usage: &OperationUsage) -> String {
+    let name_lower = name.to_lowercase();
+    
+    // Heuristic 1: Paginated is always query-result
+    if kind == "paginated" {
+        return "query-result".to_string();
+    }
+    
+    // Heuristic 2: Event pattern (past tense)
+    if name_lower.ends_with("ed") 
+        || name_lower.ends_with("event")
+        || name_lower.contains("event")
+        || name_lower.ends_with("notification") {
+        return "event".to_string();
+    }
+    
+    // Heuristic 3: Command pattern (verb-name + write operation)
+    if (name_lower.starts_with("create")
+        || name_lower.starts_with("update")
+        || name_lower.starts_with("delete")
+        || name_lower.starts_with("store")
+        || name_lower.starts_with("trigger")
+        || name_lower.contains("request"))
+        && operation_usage.write_operations.contains(name) {
+        return "command".to_string();
+    }
+    
+    // Heuristic 4: Entity pattern (has id + used in mutation operations)
+    if let Some(props) = schema.get("properties").and_then(Value::as_object) {
+        let has_id = props.contains_key("id") 
+            || props.contains_key("ID")
+            || props.contains_key("uuid")
+            || props.contains_key("identifier");
+        
+        if has_id && operation_usage.mutation_operations.contains(name) {
+            return "entity".to_string();
+        }
+        
+        // Heuristic 5: Value-object (immutable, no id, composite structure)
+        if !has_id && props.len() >= 2 && !operation_usage.mutation_operations.contains(name) {
+            // Check if it's a simple value object (Address, Money, etc.)
+            if name_lower.contains("address")
+                || name_lower.contains("amount")
+                || name_lower.contains("money")
+                || name_lower.contains("date")
+                || name_lower.contains("period")
+                || name_lower.contains("range") {
+                return "value-object".to_string();
+            }
+        }
+    }
+    
+    // Heuristic 6: Query-result pattern (list/array/collection response)
+    if name_lower.contains("list")
+        || name_lower.contains("array")
+        || name_lower.contains("collection")
+        || name_lower.ends_with("s") && operation_usage.read_operations.contains(name) {
+        return "query-result".to_string();
+    }
+    
+    // Default: dto-only
+    "dto-only".to_string()
 }

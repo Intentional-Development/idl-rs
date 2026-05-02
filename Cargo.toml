@@ -9,11 +9,13 @@ members = [
     "idl-graph",
     "idl-llm",
     "idl-interview",
-    "idl-typeexpr", "idl-mcp-server",
+    "idl-typeexpr",
+    "idl-mcp-server",
+    "idl-proposals",
 ]
 
 [workspace.package]
-version = "0.9.8"
+version = "0.9.9-rc.1"
 edition = "2021"
 rust-version = "1.75"
 authors = ["IDL Squad <intentional@github.com>"]
@@ -47,3 +49,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Testing
 pretty_assertions = "1.4"
+
+# Filesystem and crypto
+fs2 = "0.4"
+sha2 = "0.10"

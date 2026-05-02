@@ -1,7 +1,6 @@
 //! Integration tests for `idl propose` MVP.
 
 use std::fs;
-use std::path::PathBuf;
 
 use serde_json::json;
 use tempfile::TempDir;
@@ -52,9 +51,9 @@ fn test_propose_creates_proposal_file() {
     fs::write(&change_spec_path, serde_json::to_string_pretty(&change_spec).unwrap()).unwrap();
 
     // Run propose command
-    std::env::set_current_dir(temp.path()).unwrap();
     let result = assert_cmd::Command::cargo_bin("idl")
         .unwrap()
+        .current_dir(temp.path())
         .args(["propose", graph_path.to_str().unwrap(), change_spec_path.to_str().unwrap()])
         .assert()
         .success();
@@ -104,9 +103,9 @@ fn test_proposals_list() {
         serde_json::to_string_pretty(&proposal).unwrap()
     ).unwrap();
 
-    std::env::set_current_dir(temp.path()).unwrap();
     let result = assert_cmd::Command::cargo_bin("idl")
         .unwrap()
+        .current_dir(temp.path())
         .args(["proposals", "list"])
         .assert()
         .success();
@@ -168,9 +167,9 @@ fn test_proposals_accept() {
     let proposal_path = changes_dir.join("20261230120000-add-user.proposal.json");
     fs::write(&proposal_path, serde_json::to_string_pretty(&proposal).unwrap()).unwrap();
 
-    std::env::set_current_dir(temp.path()).unwrap();
     assert_cmd::Command::cargo_bin("idl")
         .unwrap()
+        .current_dir(temp.path())
         .args(["proposals", "accept", "20261230120000-add-user"])
         .assert()
         .success();
@@ -216,9 +215,9 @@ fn test_proposals_reject() {
     let proposal_path = changes_dir.join("20261230120000-bad-idea.proposal.json");
     fs::write(&proposal_path, serde_json::to_string_pretty(&proposal).unwrap()).unwrap();
 
-    std::env::set_current_dir(temp.path()).unwrap();
     assert_cmd::Command::cargo_bin("idl")
         .unwrap()
+        .current_dir(temp.path())
         .args(["proposals", "reject", "20261230120000-bad-idea", "--reason", "Not aligned with architecture"])
         .assert()
         .success();
@@ -272,9 +271,9 @@ fn test_proposals_accept_validation_failure() {
     let proposal_path = changes_dir.join("20261230120000-bad-op.proposal.json");
     fs::write(&proposal_path, serde_json::to_string_pretty(&proposal).unwrap()).unwrap();
 
-    std::env::set_current_dir(temp.path()).unwrap();
     assert_cmd::Command::cargo_bin("idl")
         .unwrap()
+        .current_dir(temp.path())
         .args(["proposals", "accept", "20261230120000-bad-op"])
         .assert()
         .failure();
@@ -340,9 +339,9 @@ fn test_modify_dto_field_operation() {
     let proposal_path = changes_dir.join("20261230120000-add-field.proposal.json");
     fs::write(&proposal_path, serde_json::to_string_pretty(&proposal).unwrap()).unwrap();
 
-    std::env::set_current_dir(temp.path()).unwrap();
     assert_cmd::Command::cargo_bin("idl")
         .unwrap()
+        .current_dir(temp.path())
         .args(["proposals", "accept", "20261230120000-add-field"])
         .assert()
         .success();

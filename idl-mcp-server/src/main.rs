@@ -1,4 +1,4 @@
-//! IDL MCP Server — read-only MVP.
+//! IDL MCP Server — binary entry point.
 //!
 //! Exposes the IDL semantic graph to LLM agents via the Model Context Protocol.
 //! Transport: stdio (standard for local MCP servers).
@@ -7,7 +7,7 @@ use anyhow::Result;
 use rmcp::{ServiceExt, transport::stdio};
 use tracing_subscriber::{self, EnvFilter};
 
-mod server;
+use idl_mcp_server::IdlServer;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -17,9 +17,9 @@ async fn main() -> Result<()> {
         .with_ansi(false)
         .init();
 
-    tracing::info!("Starting IDL MCP server (read-only)");
+    tracing::info!("Starting IDL MCP server");
 
-    let service = server::IdlServer::new().serve(stdio()).await.inspect_err(|e| {
+    let service = IdlServer::new().serve(stdio()).await.inspect_err(|e| {
         tracing::error!("serving error: {:?}", e);
     })?;
 

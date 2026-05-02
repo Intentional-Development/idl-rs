@@ -848,7 +848,7 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "idl-cli"
-version = "0.9.8"
+version = "0.9.9-rc.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -861,13 +861,13 @@ dependencies = [
  "idl-graph",
  "idl-interview",
  "idl-llm",
+ "idl-proposals",
  "idl-typeexpr",
  "jsonschema",
  "predicates",
  "pretty_assertions",
  "serde",
  "serde_json",
- "sha2",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
@@ -879,7 +879,7 @@ dependencies = [
 
 [[package]]
 name = "idl-core"
-version = "0.9.8"
+version = "0.9.9-rc.1"
 dependencies = [
  "anyhow",
  "nom 7.1.3",
@@ -892,7 +892,7 @@ dependencies = [
 
 [[package]]
 name = "idl-emitters"
-version = "0.9.8"
+version = "0.9.9-rc.1"
 dependencies = [
  "anyhow",
  "idl-core",
@@ -905,7 +905,7 @@ dependencies = [
 
 [[package]]
 name = "idl-extractors"
-version = "0.9.8"
+version = "0.9.9-rc.1"
 dependencies = [
  "anyhow",
  "idl-core",
@@ -919,7 +919,7 @@ dependencies = [
 
 [[package]]
 name = "idl-ffi"
-version = "0.9.8"
+version = "0.9.9-rc.1"
 dependencies = [
  "anyhow",
  "idl-core",
@@ -927,7 +927,7 @@ dependencies = [
 
 [[package]]
 name = "idl-graph"
-version = "0.9.8"
+version = "0.9.9-rc.1"
 dependencies = [
  "pretty_assertions",
  "serde",
@@ -937,7 +937,7 @@ dependencies = [
 
 [[package]]
 name = "idl-interview"
-version = "0.9.8"
+version = "0.9.9-rc.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -955,7 +955,7 @@ dependencies = [
 
 [[package]]
 name = "idl-llm"
-version = "0.9.8"
+version = "0.9.9-rc.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -969,7 +969,7 @@ dependencies = [
 
 [[package]]
 name = "idl-mcp-server"
-version = "0.9.8"
+version = "0.9.9-rc.1"
 dependencies = [
  "anyhow",
  "idl-graph",
@@ -978,6 +978,7 @@ dependencies = [
  "rmcp",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -985,7 +986,7 @@ dependencies = [
 
 [[package]]
 name = "idl-proposals"
-version = "0.9.8"
+version = "0.9.9-rc.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -993,6 +994,7 @@ dependencies = [
  "idl-graph",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
 ]
 

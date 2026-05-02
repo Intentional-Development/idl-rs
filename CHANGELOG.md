@@ -10,35 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - (Placeholder for in-progress work)
 
-## [0.10.0] - 2026-05-02
+## [0.9.0] - 2026-05-02
 
-### Added
+### Added (Waves 10-13 Cumulative)
+- Wave 13: Design consensus on 4/5 deferred questions (typed_ports + type_compatibility extensions)
+- Wave 13: Canonical-DTO gap closure across 4 corpora (n8n 93.8%, firefly-iii 76.2%, localsend 66.7% schema strict conformance)
 - Wave 12: DTO extension namespace support (`extensions.dto.definitions[]`)
 - Wave 12: Direction C RFC implementation (pick/omit/required/extras validation)
 - Wave 12: 10 new DTO validation rules in idl-cli validator
 - Wave 12: OpenAPI emitter canonical DTO resolution (#resolves definitions → components/schemas)
 - Wave 12: 12 DTO-focused unit tests across validator and emitter
+- Wave 11: DTO RFC implementation scaffolding and extension spec validation hooks (typed_ports, type_compatibility)
 - Wave 10: OpenAPI emitter components.schemas grouping (fixes realworld P4 blocker)
 - Wave 10: 3 emitter tests + 3 drift tests (total: 55 workspace tests)
 
 ### Changed
 - Schema compatibility: now validates graph.version against v0.1.2
 - Workspace test count: 49 → 55 (+6 from W10 emitter/drift fixes)
-- Cargo workspace version bumped to 0.10.0 (all member crates synced)
+- Cargo workspace version bumped to 0.9.0 (all member crates synced)
+- Conformance schemas: realworld 100% strict (W12), n8n 93.8% strict (W13), firefly-iii 76.2% strict (W13), localsend 66.7% strict (W13)
 
 ### Fixed
 - Wave 10: OpenAPI emitter component grouping logic (operations now reference shared schemas)
 - Wave 10: 5 drift tool edge cases (missing node detection, shifted anchor resolution)
-
-## [0.9.0] - 2026-05-01
-
-### Added
-- Wave 11: DTO RFC implementation scaffolding
-
-## [0.8.0] - 2026-05-01
-
-### Added
-- Wave 11: Extension spec validation hooks (typed_ports, type_compatibility)
 
 ## [0.7.0] - 2026-05-02
 

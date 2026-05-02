@@ -5,10 +5,20 @@ All notable changes to idl-rs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.1] - 2026-05-02
 
-### Added
-- (Placeholder for in-progress work)
+### Added (Wave 14)
+- Wrapper DTO validation rules: `dto-wrapper-requires-wraps`, `dto-wrapper-wraps-resolves`, `dto-wrapper-no-projection`
+- Wrapper DTO OpenAPI emitter logic (property name derivation from wrapped DTO, pluralization support)
+- 4 unit tests for wrapper DTO validation
+
+### Changed
+- Schema compatibility: now validates graph.version against v0.1.3
+- DtoDefinition struct: added `wrapper: bool` and `wraps: Option<String>` fields
+- OpenAPI emitter: +27 LOC for wrapper DTO emission
+
+### Fixed
+- Wrapper DTO conformance for RealWorld corpus (schemas axis 40% → 100%)
 
 ## [0.9.0] - 2026-05-02
 

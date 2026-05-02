@@ -923,6 +923,10 @@ version = "0.9.9-rc.1"
 dependencies = [
  "anyhow",
  "idl-core",
+ "idl-graph",
+ "serde",
+ "serde_json",
+ "walkdir",
 ]
 
 [[package]]

@@ -13,7 +13,10 @@ crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
 idl-core = { path = "../idl-core" }
+idl-graph = { path = "../idl-graph" }
 anyhow = { workspace = true }
+serde_json = { workspace = true }
+walkdir = { workspace = true }
 
-# FFI dependencies (to be added when implementing)
-# swift-bridge = "0.1"  # or cbindgen approach
+[dev-dependencies]
+serde = { workspace = true }

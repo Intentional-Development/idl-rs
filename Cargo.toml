@@ -9,7 +9,7 @@ members = [
     "idl-graph",
     "idl-llm",
     "idl-interview",
-    "idl-typeexpr",
+    "idl-typeexpr", "idl-mcp-server",
 ]
 
 [workspace.package]

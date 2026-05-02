@@ -24,7 +24,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use idl_graph::{parse_dtos, projected_fields_ordered, DtoDefinition, GraphDoc};
+use idl_graph::{parse_dtos, projected_fields_ordered, DtoDefinition, DtoKind, GraphDoc};
 
 use super::{node_name, pascal_case, EmitReport, EmittedFile, GraphEmitter};
 
@@ -216,8 +216,88 @@ impl GraphEmitter for OpenApiEmitter {
             if !emitted_names.insert(name.clone()) {
                 continue;
             }
-            let _ = writeln!(s, "    # GENERATED_FROM {} (base {})", dto.id, dto.base);
+            let base_label = dto.base.as_deref().unwrap_or("-");
+            let _ = writeln!(s, "    # GENERATED_FROM {} (base {})", dto.id, base_label);
             let _ = writeln!(s, "    {name}:");
+
+            match dto.kind {
+                DtoKind::Enum => {
+                    let _ = writeln!(s, "      type: {}", dto.value_type.as_deref().unwrap_or("string"));
+                    if let Some(values) = &dto.values {
+                        let _ = writeln!(s, "      enum:");
+                        for value in values {
+                            let _ = writeln!(s, "        - {}", value);
+                        }
+                    }
+                    if dto.nullable {
+                        let _ = writeln!(s, "      nullable: true");
+                    }
+                    entity_count += 1;
+                    continue;
+                }
+                DtoKind::Map => {
+                    let _ = writeln!(s, "      type: object");
+                    let _ = writeln!(s, "      additionalProperties:");
+                    if let Some(value_type) = &dto.value_type {
+                        if let Some(ref_name) = value_type.strip_prefix("dto:") {
+                            let _ = writeln!(s, "        $ref: '#/components/schemas/{ref_name}'");
+                        } else {
+                            let _ = writeln!(s, "        type: {}", map_type_to_openapi(value_type));
+                        }
+                    } else {
+                        let _ = writeln!(s, "        type: string");
+                    }
+                    entity_count += 1;
+                    continue;
+                }
+                DtoKind::Unit => {
+                    let _ = writeln!(s, "      type: object");
+                    entity_count += 1;
+                    continue;
+                }
+                DtoKind::ArrayAlias => {
+                    let _ = writeln!(s, "      type: array");
+                    let _ = writeln!(s, "      items:");
+                    write_type_or_ref_schema(&mut s, "        ", dto.items.as_deref().unwrap_or("string"));
+                    if dto.nullable {
+                        let _ = writeln!(s, "      nullable: true");
+                    }
+                    entity_count += 1;
+                    continue;
+                }
+                DtoKind::Union => {
+                    let _ = writeln!(s, "      oneOf:");
+                    for variant in dto.variants.as_deref().unwrap_or(&[]) {
+                        if variant.array {
+                            let _ = writeln!(s, "        - type: array");
+                            let _ = writeln!(s, "          items:");
+                            write_type_or_ref_schema(&mut s, "            ", variant.ref_.as_deref().or(variant.ty.as_deref()).unwrap_or("string"));
+                        } else if let Some(ref_) = &variant.ref_ {
+                            let _ = writeln!(s, "        - $ref: '#/components/schemas/{}'", dto_name(ref_));
+                        } else {
+                            let _ = writeln!(s, "        - type: {}", map_type_to_openapi(variant.ty.as_deref().unwrap_or("string")));
+                        }
+                    }
+                    if let Some(discriminator) = &dto.discriminator {
+                        let _ = writeln!(s, "      discriminator:");
+                        let _ = writeln!(s, "        propertyName: {}", discriminator.property);
+                        if !discriminator.mapping.is_empty() {
+                            let _ = writeln!(s, "        mapping:");
+                            for (key, target) in &discriminator.mapping {
+                                let mapped = target.strip_prefix("dto:").map(dto_name).unwrap_or_else(|| target.clone());
+                                let _ = writeln!(s, "          {}: '#/components/schemas/{}'", yaml_str(key), mapped);
+                            }
+                        }
+                    }
+                    if dto.nullable {
+                        let _ = writeln!(s, "      nullable: true");
+                    }
+                    entity_count += 1;
+                    continue;
+                }
+                DtoKind::Object => {}
+            }
+
             let _ = writeln!(s, "      type: object");
             
             // Wave 14: wrapper DTOs.
@@ -249,8 +329,8 @@ impl GraphEmitter for OpenApiEmitter {
             }
             
             // Standard DTO projection.
-            let base_attrs_arr: Vec<serde_json::Value> = entity_by_id
-                .get(&dto.base)
+            let base_attrs_arr: Vec<serde_json::Value> = dto.base.as_ref()
+                .and_then(|base| entity_by_id.get(base))
                 .and_then(|n| n.props.get("attributes"))
                 .and_then(|v| v.as_array())
                 .cloned()
@@ -333,6 +413,14 @@ impl GraphEmitter for OpenApiEmitter {
         report.nodes_emitted = entity_count + endpoint_count;
         report.files.push(EmittedFile { path: PathBuf::from("openapi.yaml"), content: s });
         Ok(report)
+    }
+}
+
+fn write_type_or_ref_schema(s: &mut String, indent: &str, ty: &str) {
+    if let Some(ref_name) = ty.strip_prefix("dto:") {
+        let _ = writeln!(s, "{indent}$ref: '#/components/schemas/{}'", ref_name);
+    } else {
+        let _ = writeln!(s, "{indent}type: {}", map_type_to_openapi(ty));
     }
 }
 

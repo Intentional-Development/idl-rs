@@ -1,0 +1,44 @@
+{
+  "version": "0.1.0",
+  "metadata": {
+    "name": "Ecommerce Test Graph"
+  },
+  "nodes": [
+    { "id": "scope:ecommerce", "kind": "scope", "state": "accepted", "props": { "name": "Ecommerce" } },
+    { "id": "intent:online-shopping", "kind": "intent", "state": "accepted", "props": { "name": "Online Shopping" } },
+    { "id": "entity:order", "kind": "entity", "state": "accepted", "props": { "name": "Order", "dtos": ["OrderDto"] } },
+    { "id": "entity:product", "kind": "entity", "state": "accepted", "props": { "name": "Product", "dto": "ProductDto" } },
+    { "id": "entity:customer", "kind": "entity", "state": "accepted", "props": { "name": "Customer", "dto_props": { "name": "CustomerDto" } } },
+    { "id": "aggregate:order", "kind": "aggregate", "state": "accepted", "props": { "name": "Order Aggregate" } },
+    { "id": "api:orders-api", "kind": "api", "state": "accepted", "props": { "name": "Orders API" } },
+    { "id": "api:products-api", "kind": "api", "state": "accepted", "props": { "name": "Products API" } },
+    { "id": "operation:create-order", "kind": "operation", "state": "accepted", "props": { "name": "Create Order" } },
+    { "id": "operation:list-products", "kind": "operation", "state": "accepted", "props": { "name": "List Products" } },
+    { "id": "event:order-created", "kind": "event", "state": "accepted", "props": { "name": "Order Created" } },
+    { "id": "event:order-shipped", "kind": "event", "state": "accepted", "props": { "name": "Order Shipped" } },
+    { "id": "policy:auth-required", "kind": "policy", "state": "accepted", "props": { "name": "Authentication Required" } },
+    { "id": "verification:order-total-check", "kind": "verification", "state": "accepted", "props": { "name": "Order Total Check" } },
+    { "id": "decision:use-event-sourcing", "kind": "decision", "state": "accepted", "props": { "name": "Use Event Sourcing" } },
+    { "id": "state_machine:order-lifecycle", "kind": "state_machine", "state": "accepted", "props": { "name": "Order Lifecycle" } },
+    { "id": "invariant:positive-quantity", "kind": "invariant", "state": "accepted", "props": { "name": "Positive Quantity" } },
+    { "id": "constraint:unique-email", "kind": "constraints", "state": "accepted", "props": { "name": "Unique Email" } },
+    { "id": "access_pattern:orders-by-customer", "kind": "access_pattern", "state": "accepted", "props": { "name": "Orders by Customer" } }
+  ],
+  "edges": [
+    { "id": "edge:scope-intent", "kind": "contains", "from": "scope:ecommerce", "to": "intent:online-shopping" },
+    { "id": "edge:scope-order", "kind": "contains", "from": "scope:ecommerce", "to": "entity:order" },
+    { "id": "edge:intent-api", "kind": "realizes", "from": "api:orders-api", "to": "intent:online-shopping" },
+    { "id": "edge:orders-api-create", "kind": "implements", "from": "api:orders-api", "to": "operation:create-order" },
+    { "id": "edge:products-api-list", "kind": "implements", "from": "api:products-api", "to": "operation:list-products" },
+    { "id": "edge:order-belongs", "kind": "belongs_to", "from": "entity:order", "to": "aggregate:order" },
+    { "id": "edge:create-emits", "kind": "emits", "from": "operation:create-order", "to": "event:order-created" },
+    { "id": "edge:created-triggers", "kind": "triggers", "from": "event:order-created", "to": "operation:create-order" },
+    { "id": "edge:auth-authorizes", "kind": "authorizes", "from": "policy:auth-required", "to": "api:orders-api" },
+    { "id": "edge:verify-total", "kind": "verifies", "from": "verification:order-total-check", "to": "operation:create-order" },
+    { "id": "edge:decision-api", "kind": "decides", "from": "decision:use-event-sourcing", "to": "api:orders-api" },
+    { "id": "edge:lifecycle-transition", "kind": "transitions", "from": "state_machine:order-lifecycle", "to": "state_machine:order-lifecycle" },
+    { "id": "edge:positive-constrains", "kind": "constrains", "from": "invariant:positive-quantity", "to": "operation:create-order" },
+    { "id": "edge:email-constrains", "kind": "constrains", "from": "constraint:unique-email", "to": "entity:customer" },
+    { "id": "edge:orders-query", "kind": "queries", "from": "access_pattern:orders-by-customer", "to": "entity:order" }
+  ]
+}

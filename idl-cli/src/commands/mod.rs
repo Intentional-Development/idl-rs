@@ -13,3 +13,5 @@ pub mod proposals;
 pub mod validate;
 pub mod validate_anchors;
 pub mod validate_schema;
+pub mod perspective;
+pub mod prompts;

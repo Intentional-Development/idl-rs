@@ -17,7 +17,10 @@ mod diagnostic_formatter;
 mod graph_build;
 mod proposals;
 
-use commands::{change, emit, extract, init, interview, parse, propose, validate, validate_schema, drift};
+use commands::{
+    change, drift, emit, extract, init, interview, parse, perspective, prompts, propose, validate,
+    validate_schema,
+};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -152,6 +155,36 @@ enum Commands {
     Drift {
         #[command(subcommand)]
         action: DriftAction,
+    },
+
+    /// Project a graph through a role-based perspective.
+    ///
+    /// `idl perspective <role> <graph-path>`
+    Perspective {
+        /// Role name, e.g. `product-manager` or `security`.
+        role: String,
+        /// Path to a GraphDoc JSON file.
+        graph: PathBuf,
+        /// Optional TOML perspective config override.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// Emit the filtered GraphDoc as JSON instead of Markdown.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Generate assistant instruction files from a graph.
+    ///
+    /// `idl prompts <graph-path> --target=cursor|copilot|claude|all`
+    Prompts {
+        /// Path to a GraphDoc JSON file.
+        graph: PathBuf,
+        /// Target assistant config to generate.
+        #[arg(long, default_value = "all")]
+        target: String,
+        /// Output directory (default: current working directory).
+        #[arg(long, default_value = ".")]
+        out_dir: PathBuf,
     },
 
     /// Parse IDL files and dump AST (legacy).
@@ -383,6 +416,12 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
                 drift::run_code(graph, source, fmt)
             }
         },
+        Commands::Perspective { role, graph, config, json } => {
+            perspective::run(role, graph, config, json)
+        }
+        Commands::Prompts { graph, target, out_dir } => {
+            prompts::run(graph, target, out_dir)
+        }
         Commands::Parse { path, json } => parse::run(path, json),
         Commands::Interview { action } => match action {
             InterviewAction::New { topic, rounds } => interview::run_new(topic, rounds),

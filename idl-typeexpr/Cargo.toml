@@ -1,0 +1,18 @@
+[package]
+name = "idl-typeexpr"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "TypeExpr DSL: bidirectional compiler between canonical kind forms and human-readable type expressions (W17 derived layer)"
+
+[dependencies]
+idl-graph = { path = "../idl-graph" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

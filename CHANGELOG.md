@@ -1,0 +1,71 @@
+# Changelog
+
+All notable changes to idl-rs will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- (Placeholder for in-progress work)
+
+## [0.10.0] - 2026-05-02
+
+### Added
+- Wave 12: DTO extension namespace support (`extensions.dto.definitions[]`)
+- Wave 12: Direction C RFC implementation (pick/omit/required/extras validation)
+- Wave 12: 10 new DTO validation rules in idl-cli validator
+- Wave 12: OpenAPI emitter canonical DTO resolution (#resolves definitions → components/schemas)
+- Wave 12: 12 DTO-focused unit tests across validator and emitter
+- Wave 10: OpenAPI emitter components.schemas grouping (fixes realworld P4 blocker)
+- Wave 10: 3 emitter tests + 3 drift tests (total: 55 workspace tests)
+
+### Changed
+- Schema compatibility: now validates graph.version against v0.1.2
+- Workspace test count: 49 → 55 (+6 from W10 emitter/drift fixes)
+- Cargo workspace version bumped to 0.10.0 (all member crates synced)
+
+### Fixed
+- Wave 10: OpenAPI emitter component grouping logic (operations now reference shared schemas)
+- Wave 10: 5 drift tool edge cases (missing node detection, shifted anchor resolution)
+
+## [0.9.0] - 2026-05-01
+
+### Added
+- Wave 11: DTO RFC implementation scaffolding
+
+## [0.8.0] - 2026-05-01
+
+### Added
+- Wave 11: Extension spec validation hooks (typed_ports, type_compatibility)
+
+## [0.7.0] - 2026-05-02
+
+### Added
+- Wave 10: idl-emitters crate enhancements (OpenAPI grouping, drift JSON export)
+- Wave 10: idl-cli drift command 5 polish fixes
+
+### Fixed
+- Wave 10: OpenAPI emitter component.schemas generation
+- Wave 10: Drift reporting edge cases (missing vs shifted nodes)
+
+## [0.6.0-rc] - 2026-04-30
+
+### Added
+- Wave 9: idl interview command implementation
+- Wave 8: Anchor validator + rewrite helper
+- Wave 8: Schema v0.1.1 support
+- Wave 8: Drift (graph + code) command
+- Wave 8: idl emit (rust/ts/openapi) commands
+
+### Changed
+- CLI restructured into workspace (idl-cli, idl-emitters, idl-validator crates)
+
+---
+
+[0.10.0]: https://github.com/Intentional-Development/idl-rs/compare/v0.6.0-rc...v0.10.0
+[0.9.0]: https://github.com/Intentional-Development/idl-rs/compare/v0.6.0-rc...v0.9.0
+[0.8.0]: https://github.com/Intentional-Development/idl-rs/compare/v0.6.0-rc...v0.8.0
+[0.7.0]: https://github.com/Intentional-Development/idl-rs/compare/v0.6.0-rc...v0.7.0
+[0.6.0-rc]: https://github.com/Intentional-Development/idl-rs/releases/tag/v0.6.0-rc

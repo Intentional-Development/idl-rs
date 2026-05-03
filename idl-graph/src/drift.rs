@@ -543,10 +543,8 @@ fn classify_dto_props_changed(
 ) -> DriftSeverity {
     for change in changes {
         // Check for breaking changes in DTOs.
-        if change.path == "base" || change.path == "fields" {
-            if change.after.is_none() {
-                return DriftSeverity::Breaking; // Field removed
-            }
+        if (change.path == "base" || change.path == "fields") && change.after.is_none() {
+            return DriftSeverity::Breaking; // Field removed
         }
         // If fields array changed, check if it's a removal or type change.
         if change.path == "fields" {
@@ -565,10 +563,11 @@ fn classify_dto_props_changed(
 /// Behavior contract prop changes: constraint/signature change = breaking.
 fn classify_behavior_props_changed(changes: &[PropChange]) -> DriftSeverity {
     for change in changes {
-        if change.path == "condition" || change.path == "expression" || change.path == "constraint" {
-            if change.before.is_some() && change.after.is_some() {
-                return DriftSeverity::Breaking; // Logic changed
-            }
+        if (change.path == "condition" || change.path == "expression" || change.path == "constraint")
+            && change.before.is_some()
+            && change.after.is_some()
+        {
+            return DriftSeverity::Breaking; // Logic changed
         }
     }
     DriftSeverity::Additive

@@ -847,6 +847,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
+name = "idl-audit"
+version = "0.9.9-rc.5"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "fs2",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "idl-cli"
 version = "0.9.9-rc.5"
 dependencies = [
@@ -996,11 +1010,13 @@ dependencies = [
  "anyhow",
  "chrono",
  "fs2",
+ "idl-audit",
  "idl-graph",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "uuid",
 ]
 
 [[package]]
@@ -2407,7 +2423,9 @@ version = "1.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
 dependencies = [
+ "getrandom 0.4.2",
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 

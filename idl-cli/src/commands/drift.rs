@@ -131,7 +131,7 @@ pub fn run_gate(
     graph_override: Option<PathBuf>,
     generated_override: Option<PathBuf>,
     target_overrides: Vec<String>,
-    json_output: bool,
+    ctx: &crate::output::OutputContext,
 ) -> Result<ExitCode> {
     let workspace = workspace.canonicalize().unwrap_or(workspace);
     let graph_path = match graph_override {
@@ -172,10 +172,10 @@ pub fn run_gate(
 
     write_gate_status(&workspace, &report)?;
 
-    if json_output {
-        println!("{}", serde_json::to_string_pretty(&report)?);
+    if ctx.json_mode {
+        ctx.json(&report)?;
     } else {
-        print_gate_human(&report);
+        print_gate_human(&report, ctx);
     }
 
     Ok(ExitCode::from(if drifted { 1 } else { 0 }))
@@ -292,18 +292,18 @@ fn write_gate_status(workspace: &Path, report: &GateReport) -> Result<()> {
     Ok(())
 }
 
-fn print_gate_human(report: &GateReport) {
-    println!("IDL drift gate");
-    println!("  graph: {}", report.graph);
-    println!("  generated root: {}", report.generated_root);
-    println!("  verdict: {}", report.verdict);
+fn print_gate_human(report: &GateReport, ctx: &crate::output::OutputContext) {
+    ctx.stdout("IDL drift gate");
+    ctx.stdout(&format!("  graph: {}", report.graph));
+    ctx.stdout(&format!("  generated root: {}", report.generated_root));
+    ctx.stdout(&format!("  verdict: {}", report.verdict));
     for target in &report.targets {
-        println!(
+        ctx.stdout(&format!(
             "  {}: {} ({} files checked)",
             target.target, target.verdict, target.files_checked
-        );
+        ));
         for item in &target.drift {
-            println!("    - {}: {}", item.path, item.reason);
+            ctx.stdout(&format!("    - {}: {}", item.path, item.reason));
         }
     }
 }

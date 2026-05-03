@@ -260,7 +260,11 @@ impl IdlServer {
             .save(&proposal_path)
             .map_err(|e| McpError::internal_error(format!("save proposal: {}", e), None))?;
 
-        // Audit log
+        // AI audit log
+        idl_proposals::ai_audit_log("create", &id, &params.author, Some("mcp"), None, None)
+            .map_err(|e| McpError::internal_error(format!("ai audit log: {}", e), None))?;
+
+        // Legacy audit log
         audit_log("create", &id, &params.author, Some("mcp"), None)
             .map_err(|e| McpError::internal_error(format!("audit log: {}", e), None))?;
 
@@ -407,6 +411,18 @@ impl IdlServer {
             .save(&proposal_path)
             .map_err(|e| McpError::internal_error(format!("save proposal: {}", e), None))?;
 
+        // AI audit log
+        idl_proposals::ai_audit_log(
+            "reject",
+            &proposal.id,
+            &params.actor,
+            Some("mcp"),
+            None,
+            Some(json!({"reason": params.reason.clone()})),
+        )
+        .map_err(|e| McpError::internal_error(format!("ai audit log: {}", e), None))?;
+
+        // Legacy audit log
         audit_log(
             "reject",
             &proposal.id,

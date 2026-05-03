@@ -12,6 +12,7 @@ members = [
     "idl-typeexpr",
     "idl-mcp-server",
     "idl-proposals",
+    "idl-audit",
 ]
 
 [workspace.package]

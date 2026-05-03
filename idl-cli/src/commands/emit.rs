@@ -8,7 +8,7 @@ use anyhow::{anyhow, Context, Result};
 use idl_emitters::{GraphEmitter, OpenApiEmitter, PythonEmitter, RustEmitter, TypeScriptEmitter};
 use idl_graph::GraphDoc;
 
-pub fn run(target: String, graph_path: PathBuf, out: PathBuf) -> Result<ExitCode> {
+pub fn run(target: String, graph_path: PathBuf, out: PathBuf, ctx: &crate::output::OutputContext) -> Result<ExitCode> {
     let graph = GraphDoc::load(&graph_path)
         .with_context(|| format!("load graph {}", graph_path.display()))?;
 
@@ -27,12 +27,12 @@ pub fn run(target: String, graph_path: PathBuf, out: PathBuf) -> Result<ExitCode
     std::fs::create_dir_all(&out).with_context(|| format!("create out dir {}", out.display()))?;
     report.write(&out)?;
 
-    println!(
+    ctx.stdout(&format!(
         "idl emit {target}: wrote {} files ({} LOC) covering {} nodes → {}",
         report.file_count(),
         report.total_loc(),
         report.nodes_emitted,
         out.display()
-    );
-    Ok(ExitCode::from(0))
+    ));
+    Ok(crate::exit_codes::success())
 }

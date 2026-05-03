@@ -14,7 +14,9 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 mod commands;
 mod diagnostic_formatter;
+mod exit_codes;
 mod graph_build;
+mod output;
 
 use commands::{
     change, drift, emit, extract, init, interview, parse, perspective, prompts, propose, status,
@@ -28,7 +30,13 @@ use commands::{
     about = "IDL (Intentional Development Language) — Rust CLI",
     long_about = "Parse, validate, and scaffold IDL projects.\n\
                   Wave 8 P1 surface: validate · validate-schema · init · change · extract.\n\
-                  Subcommands operate on the standard `intent/` layout (see IDL/docs/intent-folder-spec.md)."
+                  Subcommands operate on the standard `intent/` layout (see IDL/docs/intent-folder-spec.md).\n\n\
+                  Exit codes:\n  \
+                  0 = success\n  \
+                  1 = generic error\n  \
+                  2 = invalid usage\n  \
+                  3 = not found\n  \
+                  4 = conflict"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -37,6 +45,14 @@ struct Cli {
     /// Enable verbose (debug-level) logging.
     #[arg(short, long, global = true)]
     verbose: bool,
+
+    /// Suppress non-error output (clig.dev compliant).
+    #[arg(short, long, global = true)]
+    quiet: bool,
+
+    /// Never prompt for input; fail if interaction would be required (clig.dev compliant).
+    #[arg(long, global = true)]
+    no_input: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -46,7 +62,12 @@ enum Commands {
         long_about = "Parse the IDL file at `path` (default: intent/project.idl, then project.idl), \n\
         lift it into the kernel-aware semantic graph, and run the default 6 constraints.\n\
         Reports semantic-loss coverage (P0.7). Exit code: 0 ok, 1 errors, 2 warnings (non-strict).\n\
-        With --anchors, validates source_anchors against the filesystem under --source."
+        With --anchors, validates source_anchors against the filesystem under --source.\n\n\
+        Examples:\n  \
+        idl validate\n  \
+        idl validate intent/project.idl --strict\n  \
+        idl validate --json > report.json\n  \
+        idl validate --anchors graph.json --source ./src"
     )]
     Validate {
         /// IDL file (default: intent/project.idl, then project.idl).
@@ -71,6 +92,12 @@ enum Commands {
     },
 
     /// Validate a JSON graph file against `semantic-graph.schema.json` (v0.1.0).
+    #[command(
+        long_about = "Validate a JSON graph file against the schema.\n\n\
+        Examples:\n  \
+        idl validate-schema graph.json\n  \
+        idl validate-schema graph.json --json"
+    )]
     ValidateSchema {
         /// Path to a JSON graph file.
         graph: PathBuf,
@@ -85,6 +112,13 @@ enum Commands {
     },
 
     /// Initialize an IDL project layout (`intent/` scaffold).
+    #[command(
+        long_about = "Initialize an IDL project layout.\n\n\
+        Examples:\n  \
+        idl init --greenfield\n  \
+        idl init --brownfield --source ./legacy-app\n  \
+        idl init --greenfield --dir ./my-project"
+    )]
     Init {
         /// Create a fresh greenfield project.
         #[arg(long, conflicts_with = "brownfield")]
@@ -110,6 +144,12 @@ enum Commands {
     },
 
     /// Brownfield extraction (scaffold; full impl in next pass).
+    #[command(
+        long_about = "Extract IDL from source code or rewrite anchors.\n\n\
+        Examples:\n  \
+        idl extract --source ./src --output ./intent\n  \
+        idl extract --rewrite-anchors /old/path /new/path --output graph.json"
+    )]
     Extract {
         /// Source directory.
         #[arg(short, long)]
@@ -137,8 +177,12 @@ enum Commands {
     },
 
     /// Emit code from an extracted graph (P1.4 codegen).
-    ///
-    /// `idl emit <target> <graph.json> --out <dir>`
+    #[command(
+        long_about = "Emit code from an extracted graph.\n\n\
+        Examples:\n  \
+        idl emit rust graph.json --out ./generated\n  \
+        idl emit typescript graph.json --out ./generated"
+    )]
     Emit {
         /// Target language: `rust`, `typescript`, `openapi`.
         target: String,
@@ -184,6 +228,13 @@ enum Commands {
     },
 
     /// Report workspace health (graph, schema, proposals, drift, conformance).
+    #[command(
+        long_about = "Report workspace health.\n\n\
+        Examples:\n  \
+        idl status\n  \
+        idl status --json\n  \
+        idl status --graph ./intent/semantic-graph.json"
+    )]
     Status {
         /// Graph path override. Defaults to idl.graph.json discovery.
         #[arg(long)]
@@ -245,11 +296,15 @@ enum Commands {
     },
 
     /// Manage proposals (create, list, accept, reject).
-    ///
-    /// `idl propose create --title "..." --target-graph <path> --ops-file <json>`
-    /// `idl propose list [--status pending|accepted|rejected]`
-    /// `idl propose accept <id>`
-    /// `idl propose reject <id> --reason "..."`
+    #[command(
+        long_about = "Manage proposals.\n\n\
+        Examples:\n  \
+        idl propose create --title 'Add auth' --target-graph graph.json --ops-file ops.json\n  \
+        idl propose list\n  \
+        idl propose list --status pending\n  \
+        idl propose accept abc123\n  \
+        idl propose reject abc123 --reason 'Out of scope'"
+    )]
     Propose {
         #[command(subcommand)]
         action: ProposeAction,
@@ -288,17 +343,26 @@ enum ProposeAction {
         /// Path to the JSON file containing diff operations.
         #[arg(long)]
         ops_file: PathBuf,
+        /// Preview what would be created without writing (clig.dev compliant).
+        #[arg(long)]
+        dry_run: bool,
     },
     /// List proposals, optionally filtered by status.
     List {
         /// Filter by status (pending, accepted, or rejected).
         #[arg(long)]
         status: Option<String>,
+        /// Emit as JSON (clig.dev compliant).
+        #[arg(long)]
+        json: bool,
     },
     /// Accept a proposal and apply it to the target graph.
     Accept {
         /// Proposal ID (or prefix).
         id: String,
+        /// Preview what would be accepted without applying (clig.dev compliant).
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Reject a proposal with a reason.
     Reject {
@@ -307,6 +371,9 @@ enum ProposeAction {
         /// Rejection reason.
         #[arg(long)]
         reason: String,
+        /// Preview what would be rejected without writing (clig.dev compliant).
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -372,11 +439,13 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     init_tracing(cli.verbose);
 
-    match dispatch(cli.command) {
+    let ctx = output::OutputContext::new(false, cli.quiet, cli.no_input);
+
+    match dispatch(cli.command, &ctx) {
         Ok(code) => code,
         Err(err) => {
             eprintln!("error: {err:#}");
-            ExitCode::from(1)
+            exit_codes::error()
         }
     }
 }
@@ -390,7 +459,7 @@ fn init_tracing(verbose: bool) {
     let _ = fmt().with_env_filter(filter).with_target(false).try_init();
 }
 
-fn dispatch(cmd: Commands) -> Result<ExitCode> {
+fn dispatch(cmd: Commands, ctx: &output::OutputContext) -> Result<ExitCode> {
     match cmd {
         Commands::Validate {
             path,
@@ -399,6 +468,7 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             anchors,
             source,
         } => {
+            let ctx_json = output::OutputContext::new(json, ctx.quiet, ctx.no_input);
             if anchors {
                 let graph = path.ok_or_else(|| {
                     anyhow::anyhow!("--anchors requires a graph JSON path argument")
@@ -407,20 +477,23 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
                     source.ok_or_else(|| anyhow::anyhow!("--anchors requires --source <root>"))?;
                 commands::validate_anchors::run(graph, src, json)
             } else {
-                validate::run(path, strict, json)
+                validate::run(path, strict, &ctx_json)
             }
         }
         Commands::ValidateSchema {
             graph,
             schema,
             json,
-        } => validate_schema::run(graph, schema, json),
+        } => {
+            let ctx_json = output::OutputContext::new(json, ctx.quiet, ctx.no_input);
+            validate_schema::run(graph, schema, &ctx_json)
+        }
         Commands::Init {
             greenfield,
             brownfield,
             source,
             dir,
-        } => init::run(dir, greenfield, brownfield, source),
+        } => init::run(dir, greenfield, brownfield, source, ctx),
         Commands::Change { action } => match action {
             ChangeAction::New { slug } => change::new(slug),
             ChangeAction::List => change::list(),
@@ -438,8 +511,8 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             language,
             rewrite_anchors,
             in_place,
-        } => extract::run(source, output, language, rewrite_anchors, in_place),
-        Commands::Emit { target, graph, out } => emit::run(target, graph, out),
+        } => extract::run(source, output, language, rewrite_anchors, in_place, ctx),
+        Commands::Emit { target, graph, out } => emit::run(target, graph, out, ctx),
         Commands::Drift {
             gate,
             json,
@@ -449,12 +522,13 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             targets,
             action,
         } => {
+            let ctx_json = output::OutputContext::new(json, ctx.quiet, ctx.no_input);
             if gate {
-                return match drift::run_gate(workspace, graph, generated, targets, json) {
+                return match drift::run_gate(workspace, graph, generated, targets, &ctx_json) {
                     Ok(code) => Ok(code),
                     Err(error) => {
                         eprintln!("error: {error:#}");
-                        Ok(ExitCode::from(2))
+                        Ok(exit_codes::usage_error())
                     }
                 };
             }
@@ -492,7 +566,10 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
                 None => Err(anyhow::anyhow!("pass a drift subcommand or --gate")),
             }
         }
-        Commands::Status { graph, json } => status::run(graph, json),
+        Commands::Status { graph, json } => {
+            let ctx_json = output::OutputContext::new(json, ctx.quiet, ctx.no_input);
+            status::run(graph, &ctx_json)
+        }
         Commands::Perspective {
             role,
             graph,
@@ -517,10 +594,18 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
                 title,
                 target_graph,
                 ops_file,
-            } => propose::create(title, target_graph, ops_file),
-            ProposeAction::List { status } => propose::list(status),
-            ProposeAction::Accept { id } => propose::accept(id),
-            ProposeAction::Reject { id, reason } => propose::reject(id, reason),
+                dry_run,
+            } => propose::create(title, target_graph, ops_file, dry_run, ctx),
+            ProposeAction::List { status, json } => {
+                let ctx_json = output::OutputContext::new(json, ctx.quiet, ctx.no_input);
+                propose::list(status, &ctx_json)
+            }
+            ProposeAction::Accept { id, dry_run } => propose::accept(id, dry_run, ctx),
+            ProposeAction::Reject {
+                id,
+                reason,
+                dry_run,
+            } => propose::reject(id, reason, dry_run, ctx),
         },
     }
 }

@@ -7,8 +7,7 @@ use anyhow::{Context, Result};
 use idl_graph::{default_constraints, Severity, ValidationReport};
 use serde::Serialize;
 
-use crate::diagnostic_formatter::format_message_with_dtos;
-use crate::graph_build::lift_document;
+use crate::{diagnostic_formatter::format_message_with_dtos, exit_codes, graph_build::lift_document, output};
 
 #[derive(Serialize)]
 struct ValidateOutput<'a> {
@@ -21,7 +20,7 @@ struct ValidateOutput<'a> {
     report: &'a ValidationReport,
 }
 
-pub fn run(path: Option<PathBuf>, strict: bool, json: bool) -> Result<ExitCode> {
+pub fn run(path: Option<PathBuf>, strict: bool, ctx: &output::OutputContext) -> Result<ExitCode> {
     let path = resolve_path(path)?;
     let text = std::fs::read_to_string(&path)
         .with_context(|| format!("read IDL file {}", path.display()))?;
@@ -56,14 +55,14 @@ pub fn run(path: Option<PathBuf>, strict: bool, json: bool) -> Result<ExitCode> 
     }
 
     let exit = if !report.errors.is_empty() {
-        1
+        exit_codes::error()
     } else if !report.warnings.is_empty() {
-        2
+        ExitCode::from(2) // warnings as distinct code
     } else {
-        0
+        exit_codes::success()
     };
 
-    if json {
+    if ctx.json_mode {
         let out = ValidateOutput {
             source: path.display().to_string(),
             strict,
@@ -73,12 +72,12 @@ pub fn run(path: Option<PathBuf>, strict: bool, json: bool) -> Result<ExitCode> 
             lost_blocks: lifted.loss.lost_blocks.len(),
             report: &report,
         };
-        println!("{}", serde_json::to_string_pretty(&out)?);
+        ctx.json(&out)?;
     } else {
-        print_human(&path, strict, &lifted.loss, &report);
+        print_human(&path, strict, &lifted.loss, &report, ctx);
     }
 
-    Ok(ExitCode::from(exit))
+    Ok(exit)
 }
 
 fn resolve_path(path: Option<PathBuf>) -> Result<PathBuf> {
@@ -104,46 +103,44 @@ fn print_human(
     strict: bool,
     loss: &idl_graph::SemanticLossReport,
     report: &ValidationReport,
+    ctx: &output::OutputContext,
 ) {
-    println!("idl validate{}", if strict { " --strict" } else { "" });
-    println!("  source: {}", path.display());
-    println!(
+    ctx.info(&format!("idl validate{}", if strict { " --strict" } else { "" }));
+    ctx.info(&format!("  source: {}", path.display()));
+    ctx.info(&format!(
         "  coverage: {:.1}% ({}/{} blocks recognized, {} lost)",
         loss.coverage_pct(),
         loss.recognized_blocks,
         loss.total_blocks,
         loss.lost_blocks.len()
-    );
-    println!("  constraints checked: {}", report.checked.len());
-    println!(
+    ));
+    ctx.info(&format!("  constraints checked: {}", report.checked.len()));
+    ctx.info(&format!(
         "  errors: {}, warnings: {}, infos: {}",
         report.errors.len(),
         report.warnings.len(),
         report.infos.len()
-    );
+    ));
 
-    // For Phase 1, we format messages with an empty DTO list.
-    // When the validation pipeline produces DTO-aware errors, we'll pass
-    // the parsed DTOs here.
     let dtos = vec![];
 
     for e in &report.errors {
         let formatted_msg = format_message_with_dtos(&e.message, &dtos);
-        println!("  ERROR  [{}] {}", e.rule, formatted_msg);
+        ctx.error(&format!("[{}] {}", e.rule, formatted_msg));
     }
     for w in &report.warnings {
         let formatted_msg = format_message_with_dtos(&w.message, &dtos);
-        println!("  WARN   [{}] {}", w.rule, formatted_msg);
+        ctx.warn(&format!("[{}] {}", w.rule, formatted_msg));
     }
     for i in &report.infos {
         let formatted_msg = format_message_with_dtos(&i.message, &dtos);
-        println!("  INFO   [{}] {}", i.rule, formatted_msg);
+        ctx.info(&format!("INFO   [{}] {}", i.rule, formatted_msg));
     }
 
     if !loss.lost_blocks.is_empty() {
-        println!("  lost blocks:");
+        ctx.info("  lost blocks:");
         for l in &loss.lost_blocks {
-            println!("    - {} ({})", l.block_kind, l.reason.as_str());
+            ctx.info(&format!("    - {} ({})", l.block_kind, l.reason.as_str()));
         }
     }
 }

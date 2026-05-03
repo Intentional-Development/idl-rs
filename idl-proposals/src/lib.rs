@@ -12,7 +12,7 @@
 //! 3. Accept a proposal — applies diff ops to target graph
 //! 4. Reject a proposal — marks as rejected with reason
 //!
-//! All actions are logged to `<repo>/changes/audit.jsonl` with source attribution.
+//! All actions are logged to `.idl/ai-run.jsonl` via the idl-audit crate.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -21,7 +21,9 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use uuid::Uuid;
 
+use idl_audit::{Actor, AuditEvent, AuditWriter};
 use idl_graph::doc::{GraphDoc, NodeDoc};
 
 const PROPOSAL_VERSION: &str = "0.1.0";
@@ -347,7 +349,57 @@ pub fn find_proposal(id: &str) -> Result<(PathBuf, Proposal)> {
     }
 }
 
-/// Write an audit log entry to changes/audit.jsonl.
+/// Write an audit log entry to .idl/ai-run.jsonl.
+/// 
+/// This is the new audit trail for AI-driven mutations. The old `changes/audit.jsonl`
+/// is kept for backwards compatibility but the new system provides richer metadata.
+pub fn ai_audit_log(
+    action: &str,
+    proposal_id: &str,
+    _author: &str,
+    source: Option<&str>,
+    run_id: Option<Uuid>,
+    details: Option<Value>,
+) -> Result<()> {
+    let writer = AuditWriter::new(None)?;
+    
+    let actor = match source {
+        Some("cli") => Actor::Cli,
+        Some("mcp") => Actor::Agent,
+        _ => Actor::Human,
+    };
+    
+    let tool = match source {
+        Some("cli") => format!("cli.propose.{}", action),
+        Some("mcp") => format!("mcp.proposal.{}", action),
+        _ => format!("propose.{}", action),
+    };
+    
+    let target = format!("proposal:{}", proposal_id);
+    
+    let mut event_builder = AuditEvent::builder()
+        .actor(actor)
+        .tool(tool)
+        .target(target);
+    
+    if let Some(rid) = run_id {
+        event_builder = event_builder.run_id(rid);
+    }
+    
+    if let Some(d) = details {
+        event_builder = event_builder.args(d);
+    }
+    
+    let event = event_builder.outcome_success().build()?;
+    writer.log(&event)?;
+    
+    Ok(())
+}
+
+/// Write an audit log entry to changes/audit.jsonl (legacy format).
+/// 
+/// This maintains backwards compatibility with the old audit log format.
+/// New code should use `ai_audit_log` instead.
 pub fn audit_log(
     action: &str,
     proposal_id: &str,
@@ -444,40 +496,59 @@ pub fn accept_proposal_safe(
     let mut graph: GraphDoc = serde_json::from_str(&graph_content)
         .with_context(|| format!("parse target graph {}", graph_path.display()))?;
 
-    // 3. Apply diff ops
+    // 3. Compute before hash
+    use sha2::{Digest, Sha256};
+    let mut hasher_before = Sha256::new();
+    hasher_before.update(graph_content.as_bytes());
+    let hash_before = format!("{:x}", hasher_before.finalize());
+
+    // 4. Apply diff ops
     proposal
         .apply(&mut graph)
         .context("apply diff ops to graph")?;
 
-    // 4. Sort nodes deterministically
+    // 5. Sort nodes deterministically
     sort_graph_nodes(&mut graph);
 
-    // 5. Validate result (basic schema check)
+    // 6. Validate result (basic schema check)
     let updated_content =
         serde_json::to_string_pretty(&graph).context("serialize updated graph")?;
 
-    // 6. Write back to disk
+    // 7. Write back to disk
     std::fs::write(&graph_path, &updated_content)
         .with_context(|| format!("write updated graph to {}", graph_path.display()))?;
 
-    // 7. Compute hash
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(updated_content.as_bytes());
-    let hash = format!("{:x}", hasher.finalize());
+    // 8. Compute after hash
+    let mut hasher_after = Sha256::new();
+    hasher_after.update(updated_content.as_bytes());
+    let hash_after = format!("{:x}", hasher_after.finalize());
 
-    // 8. Update proposal status
+    // 9. Update proposal status
     proposal.accept();
     proposal.save(&proposal_path)?;
 
-    // 9. Log to audit trail
+    // 10. Log to AI audit trail with before/after hashes
+    ai_audit_log(
+        "accept",
+        &proposal.id,
+        actor,
+        source,
+        None,
+        Some(serde_json::json!({
+            "target": proposal.target_graph,
+            "hash_before": hash_before,
+            "hash_after": hash_after.clone(),
+        })),
+    )?;
+
+    // 11. Log to legacy audit trail
     audit_log(
         "accept",
         &proposal.id,
         actor,
         source,
-        Some(serde_json::json!({"target": proposal.target_graph, "hash": hash})),
+        Some(serde_json::json!({"target": proposal.target_graph, "hash": hash_after.clone()})),
     )?;
 
-    Ok(hash)
+    Ok(hash_after)
 }

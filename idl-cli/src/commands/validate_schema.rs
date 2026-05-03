@@ -25,7 +25,7 @@ struct SchemaReport {
     violations: Vec<SchemaViolation>,
 }
 
-pub fn run(graph_path: PathBuf, schema_override: Option<PathBuf>, json: bool) -> Result<ExitCode> {
+pub fn run(graph_path: PathBuf, schema_override: Option<PathBuf>, ctx: &crate::output::OutputContext) -> Result<ExitCode> {
     let schema_text = match &schema_override {
         Some(p) => std::fs::read_to_string(p)
             .with_context(|| format!("read schema file {}", p.display()))?,
@@ -67,18 +67,18 @@ pub fn run(graph_path: PathBuf, schema_override: Option<PathBuf>, json: bool) ->
         violations,
     };
 
-    if json {
-        println!("{}", serde_json::to_string_pretty(&report)?);
+    if ctx.json_mode {
+        ctx.json(&report)?;
     } else {
-        println!("idl validate-schema");
-        println!("  schema: {}", report.schema_id);
-        println!("  graph:  {}", report.graph_path);
+        ctx.info("idl validate-schema");
+        ctx.info(&format!("  schema: {}", report.schema_id));
+        ctx.info(&format!("  graph:  {}", report.graph_path));
         if valid {
-            println!("  result: VALID");
+            ctx.stdout("  result: VALID");
         } else {
-            println!("  result: INVALID ({} violations)", report.violations.len());
+            ctx.stdout(&format!("  result: INVALID ({} violations)", report.violations.len()));
             for v in &report.violations {
-                println!(
+                ctx.error(&format!(
                     "    {} (schema: {}): {}",
                     if v.pointer.is_empty() {
                         "/"
@@ -87,10 +87,10 @@ pub fn run(graph_path: PathBuf, schema_override: Option<PathBuf>, json: bool) ->
                     },
                     v.schema_pointer,
                     v.message
-                );
+                ));
             }
         }
     }
 
-    Ok(ExitCode::from(if valid { 0 } else { 1 }))
+    Ok(if valid { crate::exit_codes::success() } else { crate::exit_codes::error() })
 }

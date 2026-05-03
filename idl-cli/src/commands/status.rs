@@ -9,6 +9,7 @@ use idl_graph::GraphDoc;
 use serde::Serialize;
 use serde_json::{json, Value};
 
+use crate::{exit_codes, output};
 use idl_proposals::{list_proposals, ProposalStatus};
 
 const EMBEDDED_SCHEMA: &str = include_str!("../../../../IDL/schemas/semantic-graph.schema.json");
@@ -56,7 +57,7 @@ struct ConformanceStatus {
     summary: String,
 }
 
-pub fn run(graph: Option<PathBuf>, json_output: bool) -> Result<ExitCode> {
+pub fn run(graph: Option<PathBuf>, ctx: &output::OutputContext) -> Result<ExitCode> {
     let cwd = std::env::current_dir().context("resolve current directory")?;
     let graph_path = match graph {
         Some(path) => path,
@@ -101,13 +102,13 @@ pub fn run(graph: Option<PathBuf>, json_output: bool) -> Result<ExitCode> {
         warnings,
     };
 
-    if json_output {
-        println!("{}", serde_json::to_string_pretty(&report)?);
+    if ctx.json_mode {
+        ctx.json(&report)?;
     } else {
-        print_human(&report);
+        print_human(&report, ctx);
     }
 
-    Ok(ExitCode::from(0))
+    Ok(exit_codes::success())
 }
 
 fn detect_graph(cwd: &Path) -> Option<PathBuf> {
@@ -245,50 +246,50 @@ fn summarize_conformance(value: &Value) -> String {
     }
 }
 
-fn print_human(report: &StatusReport) {
-    println!("IDL workspace status");
-    println!("\nWorkspace");
-    println!("  cwd: {}", report.workspace.cwd);
-    println!("  graph: {}", report.workspace.graph_path);
-    println!("  schema version: {}", report.workspace.schema_version);
+fn print_human(report: &StatusReport, ctx: &output::OutputContext) {
+    ctx.stdout("IDL workspace status");
+    ctx.stdout("\nWorkspace");
+    ctx.stdout(&format!("  cwd: {}", report.workspace.cwd));
+    ctx.stdout(&format!("  graph: {}", report.workspace.graph_path));
+    ctx.stdout(&format!("  schema version: {}", report.workspace.schema_version));
 
-    println!("\nSchema");
-    println!("  declared: {}", report.schema.declared_version);
-    println!("  installed: {}", report.schema.installed_version);
-    println!(
+    ctx.stdout("\nSchema");
+    ctx.stdout(&format!("  declared: {}", report.schema.declared_version));
+    ctx.stdout(&format!("  installed: {}", report.schema.installed_version));
+    ctx.stdout(&format!(
         "  match: {}",
         if report.schema.matches { "yes" } else { "no" }
-    );
+    ));
 
-    println!("\nProposals");
-    println!("  pending: {}", report.proposals.pending);
-    println!("  accepted: {}", report.proposals.accepted);
-    println!("  rejected: {}", report.proposals.rejected);
+    ctx.stdout("\nProposals");
+    ctx.stdout(&format!("  pending: {}", report.proposals.pending));
+    ctx.stdout(&format!("  accepted: {}", report.proposals.accepted));
+    ctx.stdout(&format!("  rejected: {}", report.proposals.rejected));
 
-    println!("\nDrift");
-    println!(
+    ctx.stdout("\nDrift");
+    ctx.stdout(&format!(
         "  last run: {}",
         report
             .drift
             .last_run_timestamp
             .as_deref()
             .unwrap_or("unknown")
-    );
-    println!("  last verdict: {}", report.drift.last_verdict);
+    ));
+    ctx.stdout(&format!("  last verdict: {}", report.drift.last_verdict));
 
-    println!("\nConformance");
+    ctx.stdout("\nConformance");
     if report.conformance.is_empty() {
-        println!("  none linked");
+        ctx.stdout("  none linked");
     } else {
         for item in &report.conformance {
-            println!("  {}: {}", item.corpus, item.summary);
+            ctx.stdout(&format!("  {}: {}", item.corpus, item.summary));
         }
     }
 
     if !report.warnings.is_empty() {
-        println!("\nWarnings");
+        ctx.stdout("\nWarnings");
         for warning in &report.warnings {
-            println!("  warning: {warning}");
+            ctx.warn(warning);
         }
     }
 }

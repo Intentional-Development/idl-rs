@@ -17,6 +17,7 @@ pub fn run(
     language: Option<String>,
     rewrite_anchors: Option<Vec<String>>,
     in_place: bool,
+    ctx: &crate::output::OutputContext,
 ) -> Result<ExitCode> {
     if let Some(prefixes) = rewrite_anchors {
         let old = prefixes
@@ -28,16 +29,16 @@ pub fn run(
         let graph_path = output.clone().or_else(|| source.clone()).ok_or_else(|| {
             anyhow!("pass --output <graph.json> (or --source) for rewrite-anchors")
         })?;
-        return rewrite_anchors_in_file(&graph_path, old, new, in_place);
+        return rewrite_anchors_in_file(&graph_path, old, new, in_place, ctx);
     }
 
-    println!(
+    ctx.stdout(&format!(
         "TODO: extraction adapters land in next pass; see brownfield extraction docs.\n  source:   {}\n  output:   {}\n  language: {}",
         source.as_ref().map(|p| p.display().to_string()).unwrap_or("(unset)".into()),
         output.as_ref().map(|p| p.display().to_string()).unwrap_or("(unset)".into()),
         language.as_deref().unwrap_or("(unset)"),
-    );
-    Ok(ExitCode::from(0))
+    ));
+    Ok(crate::exit_codes::success())
 }
 
 pub fn rewrite_anchors_in_file(
@@ -45,6 +46,7 @@ pub fn rewrite_anchors_in_file(
     old_prefix: &str,
     new_prefix: &str,
     in_place: bool,
+    ctx: &crate::output::OutputContext,
 ) -> Result<ExitCode> {
     let text = std::fs::read_to_string(graph_path)
         .with_context(|| format!("read {}", graph_path.display()))?;
@@ -64,12 +66,12 @@ pub fn rewrite_anchors_in_file(
     };
     std::fs::write(&target, pretty).with_context(|| format!("write {}", target.display()))?;
 
-    println!(
+    ctx.stdout(&format!(
         "rewrote {rewritten} anchors: `{old_prefix}` -> `{new_prefix}`\n  input:  {}\n  output: {}",
         graph_path.display(),
         target.display()
-    );
-    Ok(ExitCode::from(0))
+    ));
+    Ok(crate::exit_codes::success())
 }
 
 fn sibling_with_suffix(path: &std::path::Path, suffix: &str) -> PathBuf {

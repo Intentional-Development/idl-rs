@@ -21,6 +21,7 @@ pub fn run(
     greenfield: bool,
     brownfield: bool,
     source: Option<PathBuf>,
+    ctx: &crate::output::OutputContext,
 ) -> Result<ExitCode> {
     if greenfield == brownfield {
         bail!("pass exactly one of --greenfield or --brownfield");
@@ -33,22 +34,22 @@ pub fn run(
 
     if greenfield {
         scaffold_greenfield(&intent)?;
-        println!(
+        ctx.stdout(&format!(
             "✓ greenfield init at {}\n  intent/project.idl\n  intent/changes/0001-initial-intent/\n  intent/.idl/config.json",
             dir.display()
-        );
+        ));
     } else {
         let src = source.expect("clap requires --source with --brownfield");
         scaffold_brownfield(&intent, &src)?;
-        println!(
+        ctx.stdout(&format!(
             "✓ brownfield init at {}\n  intent/extracted/ (placeholder)\n  intent/changes/0001-promote-extraction/\n  intent/.idl/config.json\n  source: {}\n  next: run `idl extract --source {} --output intent/extracted` once adapters land.",
             dir.display(),
             src.display(),
             src.display()
-        );
+        ));
     }
 
-    Ok(ExitCode::from(0))
+    Ok(crate::exit_codes::success())
 }
 
 fn write_config(intent: &Path, brownfield: bool) -> Result<()> {

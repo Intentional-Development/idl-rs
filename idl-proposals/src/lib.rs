@@ -280,26 +280,38 @@ pub fn locate_changes_dir() -> Result<PathBuf> {
 pub fn list_proposals(status_filter: Option<ProposalStatus>) -> Result<Vec<(PathBuf, Proposal)>> {
     let changes = locate_changes_dir()?;
     let mut proposals = Vec::new();
+    let mut seen_ids = std::collections::HashSet::new();
 
-    if !changes.is_dir() {
-        return Ok(proposals);
-    }
+    // Look in both changes/ and changes/proposals/ for backwards compatibility
+    let search_dirs = vec![changes.clone(), changes.join("proposals")];
 
-    for entry in fs::read_dir(&changes)? {
-        let entry = entry?;
-        let path = entry.path();
-        let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        
-        if path.is_file()
-            && path
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e == "json")
-                .unwrap_or(false)
-            && filename.contains(".proposal.")
-        {
+    for search_dir in search_dirs {
+        if !search_dir.is_dir() {
+            continue;
+        }
+
+        for entry in fs::read_dir(&search_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            
+            // Skip non-JSON files and audit log
+            if !path.is_file() 
+                || path.extension().and_then(|e| e.to_str()) != Some("json")
+                || filename == "audit.jsonl"
+            {
+                continue;
+            }
+
+            // Try to load as a proposal
             match Proposal::load(&path) {
                 Ok(proposal) => {
+                    // Skip if already seen (avoid duplicates from multiple dirs)
+                    if seen_ids.contains(&proposal.id) {
+                        continue;
+                    }
+                    seen_ids.insert(proposal.id.clone());
+
                     if let Some(ref filter) = status_filter {
                         if proposal.status == *filter {
                             proposals.push((path, proposal));
@@ -308,8 +320,8 @@ pub fn list_proposals(status_filter: Option<ProposalStatus>) -> Result<Vec<(Path
                         proposals.push((path, proposal));
                     }
                 },
-                Err(e) => {
-                    eprintln!("warning: failed to load {}: {}", path.display(), e);
+                Err(_e) => {
+                    // Skip silently - might be a non-proposal JSON file
                 }
             }
         }

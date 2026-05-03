@@ -15,7 +15,6 @@ use tracing_subscriber::{fmt, EnvFilter};
 mod commands;
 mod diagnostic_formatter;
 mod graph_build;
-mod proposals;
 
 use commands::{
     change, drift, emit, extract, init, interview, parse, perspective, prompts, propose, validate,
@@ -207,24 +206,15 @@ enum Commands {
         action: InterviewAction,
     },
 
-    /// Create a new proposal from a change specification.
+    /// Manage proposals (create, list, accept, reject).
     ///
-    /// `idl propose <graph-path> <change-spec.json>`
+    /// `idl propose create --title "..." --target-graph <path> --ops-file <json>`
+    /// `idl propose list [--status pending|accepted|rejected]`
+    /// `idl propose accept <id>`
+    /// `idl propose reject <id> --reason "..."`
     Propose {
-        /// Path to the target graph file.
-        graph: PathBuf,
-        /// Path to the change specification JSON file.
-        change_spec: PathBuf,
-    },
-
-    /// Manage proposals (list, accept, reject).
-    ///
-    /// `idl proposals list`
-    /// `idl proposals accept <id>`
-    /// `idl proposals reject <id> --reason "..."`
-    Proposals {
         #[command(subcommand)]
-        action: ProposalsAction,
+        action: ProposeAction,
     },
 }
 
@@ -254,9 +244,25 @@ enum InterviewAction {
 }
 
 #[derive(Subcommand, Debug)]
-enum ProposalsAction {
-    /// List all proposals.
-    List,
+enum ProposeAction {
+    /// Create a new proposal from a JSON file containing diff operations.
+    Create {
+        /// Proposal title.
+        #[arg(long)]
+        title: String,
+        /// Path to the target graph file.
+        #[arg(long)]
+        target_graph: PathBuf,
+        /// Path to the JSON file containing diff operations.
+        #[arg(long)]
+        ops_file: PathBuf,
+    },
+    /// List proposals, optionally filtered by status.
+    List {
+        /// Filter by status (pending, accepted, or rejected).
+        #[arg(long)]
+        status: Option<String>,
+    },
     /// Accept a proposal and apply it to the target graph.
     Accept {
         /// Proposal ID (or prefix).
@@ -430,11 +436,13 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             InterviewAction::List => interview::run_list(),
             InterviewAction::Show { session_id } => interview::run_show(session_id),
         },
-        Commands::Propose { graph, change_spec } => propose::run(graph, change_spec),
-        Commands::Proposals { action } => match action {
-            ProposalsAction::List => commands::proposals::list(),
-            ProposalsAction::Accept { id } => commands::proposals::accept(id),
-            ProposalsAction::Reject { id, reason } => commands::proposals::reject(id, reason),
+        Commands::Propose { action } => match action {
+            ProposeAction::Create { title, target_graph, ops_file } => {
+                propose::create(title, target_graph, ops_file)
+            }
+            ProposeAction::List { status } => propose::list(status),
+            ProposeAction::Accept { id } => propose::accept(id),
+            ProposeAction::Reject { id, reason } => propose::reject(id, reason),
         },
     }
 }

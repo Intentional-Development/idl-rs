@@ -117,7 +117,7 @@ fn status_happy_path_reports_sections() {
 #[test]
 fn status_json_output_is_machine_readable() {
     let temp = TempDir::new().unwrap();
-    write_graph(temp.path(), "0.1.9");
+    write_graph(temp.path(), "0.1.10");
     let output = idl()
         .current_dir(temp.path())
         .args(["status", "--json"])
@@ -127,7 +127,7 @@ fn status_json_output_is_machine_readable() {
         .stdout
         .clone();
     let value: serde_json::Value = serde_json::from_slice(&output).unwrap();
-    assert_eq!(value["workspace"]["schema_version"], "0.1.9");
+    assert_eq!(value["workspace"]["schema_version"], "0.1.10");
     assert_eq!(value["schema"]["matches"], true);
 }
 

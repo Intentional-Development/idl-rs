@@ -450,7 +450,13 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             action,
         } => {
             if gate {
-                return drift::run_gate(workspace, graph, generated, targets, json);
+                return match drift::run_gate(workspace, graph, generated, targets, json) {
+                    Ok(code) => Ok(code),
+                    Err(error) => {
+                        eprintln!("error: {error:#}");
+                        Ok(ExitCode::from(2))
+                    }
+                };
             }
             match action {
                 Some(DriftAction::Graph {

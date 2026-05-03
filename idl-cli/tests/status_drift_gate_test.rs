@@ -158,6 +158,17 @@ fn drift_gate_clean_workspace_exits_zero() {
 }
 
 #[test]
+fn drift_gate_internal_error_exits_two() {
+    let temp = TempDir::new().unwrap();
+    idl()
+        .current_dir(temp.path())
+        .args(["drift", "--gate", "--graph", "missing.graph.json"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("error:"));
+}
+
+#[test]
 fn drift_gate_seeded_target_drift_exits_one() {
     let temp = TempDir::new().unwrap();
     let graph = write_graph(temp.path(), "0.1.9");

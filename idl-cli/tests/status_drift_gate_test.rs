@@ -140,7 +140,7 @@ fn status_warns_on_mismatched_schema_version() {
         .arg("status")
         .assert()
         .success()
-        .stdout(predicate::str::contains("warning: schema version mismatch"));
+        .stderr(predicate::str::contains("warning: schema version mismatch"));
 }
 
 #[test]

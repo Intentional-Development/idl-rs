@@ -123,7 +123,7 @@ fn validate_ok_fixture_succeeds() {
         .arg(fixtures().join("ok.idl"))
         .assert()
         .code(predicate::in_iter(vec![0i32, 2]))
-        .stdout(predicate::str::contains("coverage:"));
+        .stderr(predicate::str::contains("coverage:")); // now goes to stderr per clig.dev
 }
 
 #[test]

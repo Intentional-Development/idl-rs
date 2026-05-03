@@ -309,6 +309,21 @@ enum Commands {
         #[command(subcommand)]
         action: ProposeAction,
     },
+
+    /// Manage ledger entries (questions, decisions, evidence).
+    #[command(
+        long_about = "Manage ledger entries.\n\n\
+        Examples:\n  \
+        idl ledger ask 'Should we use Rust or Go?' --topic=architecture\n  \
+        idl ledger decide 'Use Rust for CLI' --rationale='Performance and safety' --scope=tooling\n  \
+        idl ledger link --kind=commit --uri=abc123 --supports=<decision-id>\n  \
+        idl ledger list --kind=question --status=open\n  \
+        idl ledger validate"
+    )]
+    Ledger {
+        #[command(subcommand)]
+        action: LedgerAction,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -433,6 +448,94 @@ enum ChangeAction {
     Diff { id: String },
     /// Validate a change folder (delta well-formed, references resolve).
     Validate { id: String },
+}
+
+#[derive(Subcommand, Debug)]
+enum LedgerAction {
+    /// Initialize ledger directory structure.
+    Init,
+    /// Ask a question that may block decisions.
+    Ask {
+        /// Question body text.
+        body: String,
+        /// Topic or category (default: general).
+        #[arg(long)]
+        topic: Option<String>,
+        /// Decision IDs that are blocked by this question (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        blocks: Vec<uuid::Uuid>,
+        /// Emit as JSON (clig.dev compliant).
+        #[arg(long)]
+        json: bool,
+        /// Preview what would be created without writing (clig.dev compliant).
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Record a decision with rationale.
+    Decide {
+        /// Decision title.
+        title: String,
+        /// Rationale/body explaining the decision.
+        #[arg(long)]
+        rationale: String,
+        /// Decision scope: architecture, process, scope, or tooling.
+        #[arg(long, default_value = "architecture")]
+        scope: String,
+        /// Decision ID that this supersedes (optional).
+        #[arg(long)]
+        supersedes: Option<uuid::Uuid>,
+        /// Evidence IDs supporting this decision (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        evidence: Vec<uuid::Uuid>,
+        /// Emit as JSON (clig.dev compliant).
+        #[arg(long)]
+        json: bool,
+        /// Preview what would be created without writing (clig.dev compliant).
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Link evidence to a decision or question.
+    Link {
+        /// Evidence kind: commit, test-run, audit-log, external-url, or file.
+        #[arg(long)]
+        kind: String,
+        /// URI or identifier for the evidence.
+        #[arg(long)]
+        uri: String,
+        /// Decision ID that this evidence supports (optional).
+        #[arg(long)]
+        supports: Option<uuid::Uuid>,
+        /// Question ID that this evidence relates to (optional).
+        #[arg(long)]
+        question: Option<uuid::Uuid>,
+        /// SHA256 hash of evidence content (optional).
+        #[arg(long)]
+        hash: Option<String>,
+        /// Emit as JSON (clig.dev compliant).
+        #[arg(long)]
+        json: bool,
+        /// Preview what would be created without writing (clig.dev compliant).
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// List ledger entries (questions, decisions, evidence).
+    List {
+        /// Filter by kind: question, decision, or evidence.
+        #[arg(long)]
+        kind: Option<String>,
+        /// Filter by status (for questions): open, answered, or abandoned.
+        #[arg(long)]
+        status: Option<String>,
+        /// Emit as JSON (clig.dev compliant).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Validate ledger integrity (schema + reference checks).
+    Validate {
+        /// Emit as JSON (clig.dev compliant).
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -606,6 +709,59 @@ fn dispatch(cmd: Commands, ctx: &output::OutputContext) -> Result<ExitCode> {
                 reason,
                 dry_run,
             } => propose::reject(id, reason, dry_run, ctx),
+        },
+        Commands::Ledger { action } => match action {
+            LedgerAction::Init => commands::ledger::run_init(),
+            LedgerAction::Ask {
+                body,
+                topic,
+                blocks,
+                json,
+                dry_run,
+            } => commands::ledger::run_ask(body, topic, blocks, json, dry_run),
+            LedgerAction::Decide {
+                title,
+                rationale,
+                scope,
+                supersedes,
+                evidence,
+                json,
+                dry_run,
+            } => {
+                let scope = match scope.as_str() {
+                    "architecture" => idl_ledger::DecisionScope::Architecture,
+                    "process" => idl_ledger::DecisionScope::Process,
+                    "scope" => idl_ledger::DecisionScope::Scope,
+                    "tooling" => idl_ledger::DecisionScope::Tooling,
+                    _ => return Err(anyhow::anyhow!("Invalid scope: {}", scope)),
+                };
+                commands::ledger::run_decide(title, rationale, scope, supersedes, evidence, json, dry_run)
+            }
+            LedgerAction::Link {
+                kind,
+                uri,
+                supports,
+                question,
+                hash,
+                json,
+                dry_run,
+            } => {
+                let kind = match kind.as_str() {
+                    "commit" => idl_ledger::EvidenceKind::Commit,
+                    "test-run" => idl_ledger::EvidenceKind::TestRun,
+                    "audit-log" => idl_ledger::EvidenceKind::AuditLog,
+                    "external-url" => idl_ledger::EvidenceKind::ExternalUrl,
+                    "file" => idl_ledger::EvidenceKind::File,
+                    _ => return Err(anyhow::anyhow!("Invalid evidence kind: {}", kind)),
+                };
+                commands::ledger::run_link(kind, uri, supports, question, hash, json, dry_run)
+            }
+            LedgerAction::List { kind, status, json } => {
+                commands::ledger::run_list(kind, status, json)
+            }
+            LedgerAction::Validate { json } => {
+                commands::ledger::run_validate(json)
+            }
         },
     }
 }

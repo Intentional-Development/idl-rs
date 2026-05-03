@@ -1,0 +1,24 @@
+[package]
+name = "idl-ledger"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "IDL ledger management library — track questions, decisions, and evidence in typed JSON"
+
+[dependencies]
+idl-audit = { path = "../idl-audit" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+fs2 = "0.4"
+sha2 = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10"

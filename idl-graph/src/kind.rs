@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-/// Kernel construct types. 18 variants — frozen.
+/// Kernel construct types. 21 variants (extended from 18 in v0.1.10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 #[serde(rename_all = "snake_case")]
@@ -35,6 +35,9 @@ pub enum NodeKind {
     TraceLink,
     Decision,
     Verification,
+    ConsumerContract,
+    Selector,
+    LogEvent,
 }
 
 impl NodeKind {
@@ -59,11 +62,14 @@ impl NodeKind {
             NodeKind::TraceLink => "trace_link",
             NodeKind::Decision => "decision",
             NodeKind::Verification => "verification",
+            NodeKind::ConsumerContract => "consumer_contract",
+            NodeKind::Selector => "selector",
+            NodeKind::LogEvent => "log_event",
         }
     }
 
-    /// All 18 kernel variants, in canonical order.
-    pub const ALL: [NodeKind; 18] = [
+    /// All 21 kernel variants, in canonical order.
+    pub const ALL: [NodeKind; 21] = [
         NodeKind::Intent,
         NodeKind::Scope,
         NodeKind::Entity,
@@ -82,6 +88,9 @@ impl NodeKind {
         NodeKind::TraceLink,
         NodeKind::Decision,
         NodeKind::Verification,
+        NodeKind::ConsumerContract,
+        NodeKind::Selector,
+        NodeKind::LogEvent,
     ];
 
     /// Every kernel-listed `NodeKind` is in the kernel by construction.
@@ -134,6 +143,9 @@ impl FromStr for NodeKind {
             "trace_link" => NodeKind::TraceLink,
             "decision" => NodeKind::Decision,
             "verification" => NodeKind::Verification,
+            "consumer_contract" => NodeKind::ConsumerContract,
+            "selector" => NodeKind::Selector,
+            "log_event" => NodeKind::LogEvent,
             other => {
                 return Err(ParseKindError {
                     input: other.to_string(),
@@ -144,7 +156,7 @@ impl FromStr for NodeKind {
 }
 
 /// Kernel edge types. Each variant is derived from a kernel-construct relationship
-/// that must be mechanically checkable (Q2). Frozen alongside [`NodeKind`].
+/// that must be mechanically checkable (Q2). Extended from 18 to 21 variants in v0.1.10.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 #[serde(rename_all = "snake_case")]
@@ -185,6 +197,12 @@ pub enum EdgeKind {
     Contains,
     /// `intent` derives / refines another `intent`.     (Intent → Intent)
     DerivesFrom,
+    /// `consumer_contract` consumes a behavior.         (ConsumerContract → behavior)
+    Consumes,
+    /// `selector` selects/filters a DTO or entity.      (Selector → DTO|Entity)
+    Selects,
+    /// `operation` or behavior emits a log event.       (behavior → LogEvent)
+    EmitsLog,
 }
 
 impl EdgeKind {
@@ -208,10 +226,13 @@ impl EdgeKind {
             EdgeKind::Authorizes => "authorizes",
             EdgeKind::Contains => "contains",
             EdgeKind::DerivesFrom => "derives_from",
+            EdgeKind::Consumes => "consumes",
+            EdgeKind::Selects => "selects",
+            EdgeKind::EmitsLog => "emits_log",
         }
     }
 
-    pub const ALL: [EdgeKind; 18] = [
+    pub const ALL: [EdgeKind; 21] = [
         EdgeKind::Realizes,
         EdgeKind::Verifies,
         EdgeKind::Triggers,
@@ -230,6 +251,9 @@ impl EdgeKind {
         EdgeKind::Authorizes,
         EdgeKind::Contains,
         EdgeKind::DerivesFrom,
+        EdgeKind::Consumes,
+        EdgeKind::Selects,
+        EdgeKind::EmitsLog,
     ];
 
     pub const fn is_kernel(&self) -> bool {
@@ -265,6 +289,9 @@ impl FromStr for EdgeKind {
             "authorizes" => EdgeKind::Authorizes,
             "contains" => EdgeKind::Contains,
             "derives_from" => EdgeKind::DerivesFrom,
+            "consumes" => EdgeKind::Consumes,
+            "selects" => EdgeKind::Selects,
+            "emits_log" => EdgeKind::EmitsLog,
             other => {
                 return Err(ParseKindError {
                     input: other.to_string(),
@@ -313,8 +340,8 @@ mod tests {
     }
 
     #[test]
-    fn variant_counts_are_exactly_eighteen() {
-        assert_eq!(NodeKind::ALL.len(), 18);
-        assert_eq!(EdgeKind::ALL.len(), 18);
+    fn variant_counts_are_exactly_twenty_one() {
+        assert_eq!(NodeKind::ALL.len(), 21);
+        assert_eq!(EdgeKind::ALL.len(), 21);
     }
 }

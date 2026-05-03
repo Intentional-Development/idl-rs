@@ -21,6 +21,7 @@ idl-llm = { path = "../idl-llm" }
 idl-interview = { path = "../idl-interview" }
 idl-typeexpr = { path = "../idl-typeexpr" }
 idl-proposals = { path = "../idl-proposals" }
+idl-ledger = { path = "../idl-ledger" }
 
 clap = { workspace = true }
 anyhow = { workspace = true }
@@ -36,6 +37,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 toml = "0.8"
 sha2 = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.10"

@@ -7,6 +7,7 @@ pub mod emit;
 pub mod extract;
 pub mod init;
 pub mod interview;
+pub mod ledger;
 pub mod parse;
 pub mod perspective;
 pub mod prompts;

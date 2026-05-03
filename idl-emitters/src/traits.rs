@@ -1,5 +1,5 @@
-use idl_core::IdlDocument;
 use anyhow::Result;
+use idl_core::IdlDocument;
 
 /// Emitter trait - transforms IDL AST to target language code
 pub trait Emitter {

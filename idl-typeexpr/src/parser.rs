@@ -64,34 +64,17 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn consume_str(&mut self, s: &str) -> Result<(), ParseError> {
-        self.skip_whitespace();
-        if self.input[self.pos..].starts_with(s) {
-            self.pos += s.len();
-            Ok(())
-        } else {
-            Err(ParseError::Expected {
-                expected: format!("'{}'", s),
-                found: self.input[self.pos..]
-                    .chars()
-                    .take(s.len())
-                    .collect::<String>(),
-                pos: self.pos,
-            })
-        }
-    }
-
     fn parse_identifier(&mut self) -> Result<String, ParseError> {
         self.skip_whitespace();
         let start = self.pos;
-        
+
         let first = self.current().ok_or(ParseError::UnexpectedEof(self.pos))?;
         if !first.is_ascii_uppercase() {
             return Err(ParseError::InvalidReference(self.pos));
         }
-        
+
         self.pos += first.len_utf8();
-        
+
         while let Some(ch) = self.current() {
             if ch.is_ascii_alphanumeric() || ch == '_' {
                 self.pos += ch.len_utf8();
@@ -99,7 +82,7 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        
+
         Ok(self.input[start..self.pos].to_string())
     }
 
@@ -126,7 +109,11 @@ impl<'a> Parser<'a> {
         if parser.pos < parser.input.len() {
             return Err(ParseError::Expected {
                 expected: "end of input".to_string(),
-                found: parser.input[parser.pos..].chars().next().unwrap().to_string(),
+                found: parser.input[parser.pos..]
+                    .chars()
+                    .next()
+                    .unwrap()
+                    .to_string(),
                 pos: parser.pos,
             });
         }
@@ -135,7 +122,7 @@ impl<'a> Parser<'a> {
 
     fn parse_union(&mut self) -> Result<TypeExpr, ParseError> {
         let mut variants = vec![self.parse_nullable()?];
-        
+
         loop {
             self.skip_whitespace();
             if self.current() == Some('|') {
@@ -145,7 +132,7 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        
+
         if variants.len() == 1 {
             Ok(variants.into_iter().next().unwrap())
         } else {
@@ -155,7 +142,7 @@ impl<'a> Parser<'a> {
 
     fn parse_nullable(&mut self) -> Result<TypeExpr, ParseError> {
         let inner = self.parse_array()?;
-        
+
         self.skip_whitespace();
         if self.current() == Some('?') {
             self.consume('?')?;
@@ -167,7 +154,7 @@ impl<'a> Parser<'a> {
 
     fn parse_array(&mut self) -> Result<TypeExpr, ParseError> {
         let mut expr = self.parse_atom()?;
-        
+
         loop {
             self.skip_whitespace();
             if self.current() == Some('[') && self.peek(1) == Some(']') {
@@ -178,31 +165,31 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        
+
         Ok(expr)
     }
 
     fn parse_atom(&mut self) -> Result<TypeExpr, ParseError> {
         self.skip_whitespace();
-        
+
         if self.parse_keyword("Map") {
             return self.parse_map();
         }
-        
+
         if self.current() == Some('(') {
             self.consume('(')?;
             self.skip_whitespace();
-            
+
             if self.current() == Some(')') {
                 self.consume(')')?;
                 return Ok(TypeExpr::Unit);
             }
-            
+
             let inner = self.parse_union()?;
             self.consume(')')?;
             return Ok(inner);
         }
-        
+
         let word_start = self.pos;
         if let Some(ch) = self.current() {
             if ch.is_ascii_lowercase() {
@@ -215,7 +202,7 @@ impl<'a> Parser<'a> {
                         break;
                     }
                 }
-                
+
                 if let Some(prim) = PrimitiveType::from_str(&word) {
                     return Ok(TypeExpr::Primitive(prim));
                 } else {
@@ -227,9 +214,9 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        
+
         let name = self.parse_identifier()?;
-        
+
         if name.contains('.') || self.current() == Some('.') {
             let mut full_name = name;
             while self.current() == Some('.') {
@@ -249,7 +236,7 @@ impl<'a> Parser<'a> {
         self.consume(',')?;
         let value = self.parse_union()?;
         self.consume('>')?;
-        
+
         Ok(TypeExpr::Map {
             key: Box::new(key),
             value: Box::new(value),

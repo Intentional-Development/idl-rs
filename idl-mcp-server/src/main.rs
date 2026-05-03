@@ -4,7 +4,7 @@
 //! Transport: stdio (standard for local MCP servers).
 
 use anyhow::Result;
-use rmcp::{ServiceExt, transport::stdio};
+use rmcp::{transport::stdio, ServiceExt};
 use tracing_subscriber::{self, EnvFilter};
 
 use idl_mcp_server::IdlServer;
@@ -19,9 +19,13 @@ async fn main() -> Result<()> {
 
     tracing::info!("Starting IDL MCP server");
 
-    let service = IdlServer::new().serve(stdio()).await.inspect_err(|e| {
-        tracing::error!("serving error: {:?}", e);
-    })?;
+    let service = match IdlServer::new().serve(stdio()).await {
+        Ok(service) => service,
+        Err(error) => {
+            tracing::error!("serving error: {:?}", error);
+            return Err(error.into());
+        }
+    };
 
     service.waiting().await?;
     Ok(())

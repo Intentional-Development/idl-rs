@@ -186,19 +186,17 @@ impl Constraint for KernelKindOnly {
         let mut out = Vec::new();
         for node in graph.iter_nodes() {
             if !node.kind.is_kernel() {
-                out.push(
-                    ConstraintViolation {
-                        rule: self.name().to_string(),
-                        severity: Severity::Warn,
-                        message: format!(
-                            "node {:?} uses non-kernel kind {}",
-                            node.id.0,
-                            node.kind.canonical()
-                        ),
-                        node: Some(node.id.clone()),
-                        edge: None,
-                    },
-                );
+                out.push(ConstraintViolation {
+                    rule: self.name().to_string(),
+                    severity: Severity::Warn,
+                    message: format!(
+                        "node {:?} uses non-kernel kind {}",
+                        node.id.0,
+                        node.kind.canonical()
+                    ),
+                    node: Some(node.id.clone()),
+                    edge: None,
+                });
             }
         }
         out

@@ -49,10 +49,14 @@ pub(crate) fn find_idl_files(dir: &PathBuf) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for entry in walkdir::WalkDir::new(dir) {
         let entry = entry?;
-        if entry.file_type().is_file() {
-            if entry.path().extension().map(|e| e == "idl").unwrap_or(false) {
-                files.push(entry.path().to_path_buf());
-            }
+        if entry.file_type().is_file()
+            && entry
+                .path()
+                .extension()
+                .map(|e| e == "idl")
+                .unwrap_or(false)
+        {
+            files.push(entry.path().to_path_buf());
         }
     }
     Ok(files)

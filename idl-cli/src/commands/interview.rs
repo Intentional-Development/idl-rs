@@ -33,8 +33,11 @@ pub fn run_new(topic: String, rounds: u32) -> Result<ExitCode> {
     println!("✓ session created: {}", session.id);
 
     let provider = make_provider(rounds)?;
-    let outcome = tokio::runtime::Runtime::new()?
-        .block_on(runner::run_round_with_retries(&mut session, provider.as_ref(), 1))?;
+    let outcome = tokio::runtime::Runtime::new()?.block_on(runner::run_round_with_retries(
+        &mut session,
+        provider.as_ref(),
+        1,
+    ))?;
     println!(
         "  round {} done (attempts={}, confidence={:.2}, questions={})",
         outcome.round_number, outcome.attempts, outcome.confidence_overall, outcome.questions
@@ -46,8 +49,14 @@ pub fn run_continue(session_id: String) -> Result<ExitCode> {
     let cwd = std::env::current_dir()?;
     let intent = locate_intent_dir(&cwd)?;
     let mut session = Session::load(&intent, &session_id)?;
-    if matches!(session.status, SessionStatus::Completed | SessionStatus::Accepted) {
-        println!("session {session_id} already {:?}; nothing to do", session.status);
+    if matches!(
+        session.status,
+        SessionStatus::Completed | SessionStatus::Accepted
+    ) {
+        println!(
+            "session {session_id} already {:?}; nothing to do",
+            session.status
+        );
         return Ok(ExitCode::from(0));
     }
     let next = session.next_round_number();
@@ -56,8 +65,11 @@ pub fn run_continue(session_id: String) -> Result<ExitCode> {
         return Ok(ExitCode::from(0));
     }
     let provider = make_provider(session.rounds_planned)?;
-    let outcome = tokio::runtime::Runtime::new()?
-        .block_on(runner::run_round_with_retries(&mut session, provider.as_ref(), next))?;
+    let outcome = tokio::runtime::Runtime::new()?.block_on(runner::run_round_with_retries(
+        &mut session,
+        provider.as_ref(),
+        next,
+    ))?;
     println!(
         "✓ round {} done (attempts={}, confidence={:.2}, questions={})",
         outcome.round_number, outcome.attempts, outcome.confidence_overall, outcome.questions
@@ -110,14 +122,26 @@ pub fn run_show(session_id: String) -> Result<ExitCode> {
     let session = Session::load(&intent, &session_id)?;
     println!(
         "session {} (topic: {:?}, status: {:?}, rounds: {}/{})",
-        session.id, session.topic, session.status, session.rounds.len(), session.rounds_planned
+        session.id,
+        session.topic,
+        session.status,
+        session.rounds.len(),
+        session.rounds_planned
     );
     for r in &session.rounds {
         println!("---\n{}", r.transcript_md);
     }
     let graph = session.current_graph();
-    let n = graph.get("nodes").and_then(|v| v.as_array()).map(Vec::len).unwrap_or(0);
-    let e = graph.get("edges").and_then(|v| v.as_array()).map(Vec::len).unwrap_or(0);
+    let n = graph
+        .get("nodes")
+        .and_then(|v| v.as_array())
+        .map(Vec::len)
+        .unwrap_or(0);
+    let e = graph
+        .get("edges")
+        .and_then(|v| v.as_array())
+        .map(Vec::len)
+        .unwrap_or(0);
     println!("=== Accumulated graph: {n} nodes, {e} edges ===");
     println!("{}", serde_json::to_string_pretty(&graph)?);
     Ok(ExitCode::from(0))

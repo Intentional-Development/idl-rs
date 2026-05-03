@@ -1,4 +1,3 @@
-use std::fmt;
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]
@@ -9,19 +8,19 @@ pub enum IdlError {
         column: usize,
         message: String,
     },
-    
+
     #[error("Semantic error: {0}")]
     SemanticError(String),
-    
+
     #[error("Version error: {0}")]
     VersionError(String),
-    
+
     #[error("IO error: {0}")]
     IoError(String),
-    
+
     #[error("Unknown block type: {0}")]
     UnknownBlockType(String),
-    
+
     #[error("Missing required field: {0}")]
     MissingRequiredField(String),
 }

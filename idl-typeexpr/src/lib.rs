@@ -130,60 +130,60 @@ impl DtoFields {
 fn analyze_expr(expr: &TypeExpr) -> Result<(DtoKind, bool, DtoFields), CompileError> {
     match expr {
         TypeExpr::Primitive(_) => Err(CompileError::BarePrimitive),
-        
+
         TypeExpr::Reference(_name) => {
             // Reference to a named DTO — assume object kind (could be enum,
             // but that requires graph lookup which is outside TypeExpr's scope)
             Ok((DtoKind::Object, false, DtoFields::empty()))
         }
-        
+
         TypeExpr::Array(inner) => {
             let items_ref = match inner.as_ref() {
                 TypeExpr::Reference(name) => format!("dto:{}", name),
                 TypeExpr::Primitive(p) => p.as_str().to_string(),
                 _ => return Err(CompileError::InvalidKind),
             };
-            
+
             let mut fields = DtoFields::empty();
             fields.items = Some(items_ref);
             Ok((DtoKind::ArrayAlias, false, fields))
         }
-        
+
         TypeExpr::Nullable(inner) => {
             let (kind, _inner_nullable, fields) = analyze_expr(inner)?;
             Ok((kind, true, fields))
         }
-        
+
         TypeExpr::Union(variants) => {
             let dto_variants: Vec<DtoVariant> = variants
                 .iter()
                 .map(expr_to_variant)
                 .collect::<Result<_, _>>()?;
-            
+
             let mut fields = DtoFields::empty();
             fields.variants = Some(dto_variants);
             Ok((DtoKind::Union, false, fields))
         }
-        
+
         TypeExpr::Map { key, value } => {
             let key_str = match key.as_ref() {
                 TypeExpr::Primitive(p) => p.as_str().to_string(),
                 TypeExpr::Reference(name) => name.clone(),
                 _ => return Err(CompileError::InvalidKind),
             };
-            
+
             let value_str = match value.as_ref() {
                 TypeExpr::Primitive(p) => p.as_str().to_string(),
                 TypeExpr::Reference(name) => format!("dto:{}", name),
                 _ => return Err(CompileError::InvalidKind),
             };
-            
+
             let mut fields = DtoFields::empty();
             fields.key_type = Some(key_str);
             fields.value_type = Some(value_str);
             Ok((DtoKind::Map, false, fields))
         }
-        
+
         TypeExpr::Unit => Ok((DtoKind::Unit, false, DtoFields::empty())),
     }
 }
@@ -195,29 +195,27 @@ fn expr_to_variant(expr: &TypeExpr) -> Result<DtoVariant, CompileError> {
             ref_: None,
             array: false,
         }),
-        
+
         TypeExpr::Reference(name) => Ok(DtoVariant {
             ty: None,
             ref_: Some(format!("dto:{}", name)),
             array: false,
         }),
-        
-        TypeExpr::Array(inner) => {
-            match inner.as_ref() {
-                TypeExpr::Primitive(p) => Ok(DtoVariant {
-                    ty: Some(p.as_str().to_string()),
-                    ref_: None,
-                    array: true,
-                }),
-                TypeExpr::Reference(name) => Ok(DtoVariant {
-                    ty: None,
-                    ref_: Some(format!("dto:{}", name)),
-                    array: true,
-                }),
-                _ => Err(CompileError::InvalidKind),
-            }
-        }
-        
+
+        TypeExpr::Array(inner) => match inner.as_ref() {
+            TypeExpr::Primitive(p) => Ok(DtoVariant {
+                ty: Some(p.as_str().to_string()),
+                ref_: None,
+                array: true,
+            }),
+            TypeExpr::Reference(name) => Ok(DtoVariant {
+                ty: None,
+                ref_: Some(format!("dto:{}", name)),
+                array: true,
+            }),
+            _ => Err(CompileError::InvalidKind),
+        },
+
         _ => Err(CompileError::InvalidKind),
     }
 }

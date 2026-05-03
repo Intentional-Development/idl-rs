@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// IDL Abstract Syntax Tree
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -36,8 +36,13 @@ async fn interview_runs_5_rounds_to_completion() {
     let mut session = Session::new(&intent, "todo app for solo users", "gpt-5.5", 5).unwrap();
 
     for n in 1..=5 {
-        let outcome = run_round_with_retries(&mut session, &provider, n).await.unwrap();
-        assert_eq!(outcome.attempts, 1, "round {n} should pass on first attempt");
+        let outcome = run_round_with_retries(&mut session, &provider, n)
+            .await
+            .unwrap();
+        assert_eq!(
+            outcome.attempts, 1,
+            "round {n} should pass on first attempt"
+        );
     }
     assert_eq!(session.status, SessionStatus::Completed);
     assert_eq!(session.rounds.len(), 5);
@@ -73,7 +78,9 @@ async fn one_invalid_then_recovers() {
     provider.set_pending_invalid(1);
 
     let mut session = Session::new(&intent, "demo", "gpt-5.5", 5).unwrap();
-    let outcome = run_round_with_retries(&mut session, &provider, 1).await.unwrap();
+    let outcome = run_round_with_retries(&mut session, &provider, 1)
+        .await
+        .unwrap();
     assert_eq!(outcome.attempts, 2, "should succeed on the second attempt");
 }
 
@@ -85,7 +92,9 @@ async fn accept_creates_proposed_change_folder() {
 
     let mut session = Session::new(&intent, "todo app for solo users", "gpt-5.5", 5).unwrap();
     for n in 1..=5 {
-        run_round_with_retries(&mut session, &provider, n).await.unwrap();
+        run_round_with_retries(&mut session, &provider, n)
+            .await
+            .unwrap();
     }
 
     let outcome = accept::accept(&intent, &mut session).unwrap();

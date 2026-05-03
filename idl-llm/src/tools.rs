@@ -8,16 +8,45 @@ use crate::ToolDef;
 use serde_json::json;
 
 const KERNEL_NODE_KINDS: &[&str] = &[
-    "intent", "scope", "entity", "aggregate", "variant", "constraints",
-    "event", "operation", "state_machine", "rule", "invariant", "policy",
-    "api", "access_pattern", "mapping", "trace_link", "decision", "verification",
+    "intent",
+    "scope",
+    "entity",
+    "aggregate",
+    "variant",
+    "constraints",
+    "event",
+    "operation",
+    "state_machine",
+    "rule",
+    "invariant",
+    "policy",
+    "api",
+    "access_pattern",
+    "mapping",
+    "trace_link",
+    "decision",
+    "verification",
 ];
 
 const KERNEL_EDGE_KINDS: &[&str] = &[
-    "realizes", "verifies", "triggers", "emits", "handles", "constrains",
-    "traces_to", "extracted_from", "supersedes", "decides", "implements",
-    "belongs_to", "variant_of", "transitions", "queries", "authorizes",
-    "contains", "derives_from",
+    "realizes",
+    "verifies",
+    "triggers",
+    "emits",
+    "handles",
+    "constrains",
+    "traces_to",
+    "extracted_from",
+    "supersedes",
+    "decides",
+    "implements",
+    "belongs_to",
+    "variant_of",
+    "transitions",
+    "queries",
+    "authorizes",
+    "contains",
+    "derives_from",
 ];
 
 pub fn default_tools() -> Vec<ToolDef> {

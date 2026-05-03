@@ -56,8 +56,12 @@ pub enum ProposalStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum DiffOp {
-    AddDto { dto: NodeDoc },
-    RemoveDto { node_id: String },
+    AddDto {
+        dto: NodeDoc,
+    },
+    RemoveDto {
+        node_id: String,
+    },
     ModifyDtoField {
         dto_id: String,
         field_name: String,
@@ -65,7 +69,10 @@ pub enum DiffOp {
         #[serde(skip_serializing_if = "Option::is_none")]
         field_data: Option<Value>,
     },
-    ChangeKind { node_id: String, new_kind: String },
+    ChangeKind {
+        node_id: String,
+        new_kind: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,10 +137,8 @@ impl Proposal {
 
     /// Save proposal to disk.
     pub fn save(&self, path: &Path) -> Result<()> {
-        let content =
-            serde_json::to_string_pretty(self).context("serialize proposal")?;
-        fs::write(path, content)
-            .with_context(|| format!("write proposal {}", path.display()))?;
+        let content = serde_json::to_string_pretty(self).context("serialize proposal")?;
+        fs::write(path, content).with_context(|| format!("write proposal {}", path.display()))?;
         Ok(())
     }
 
@@ -173,16 +178,12 @@ impl Proposal {
                         .props
                         .get_mut("dto_props")
                         .and_then(|v| v.as_object_mut())
-                        .ok_or_else(|| {
-                            anyhow!("node {} has no dto_props object", dto_id)
-                        })?;
+                        .ok_or_else(|| anyhow!("node {} has no dto_props object", dto_id))?;
 
                     let fields = dto_props
                         .get_mut("fields")
                         .and_then(|v| v.as_array_mut())
-                        .ok_or_else(|| {
-                            anyhow!("node {} has no dto_props.fields array", dto_id)
-                        })?;
+                        .ok_or_else(|| anyhow!("node {} has no dto_props.fields array", dto_id))?;
 
                     match action {
                         FieldAction::Add => {
@@ -294,9 +295,9 @@ pub fn list_proposals(status_filter: Option<ProposalStatus>) -> Result<Vec<(Path
             let entry = entry?;
             let path = entry.path();
             let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-            
+
             // Skip non-JSON files and audit log
-            if !path.is_file() 
+            if !path.is_file()
                 || path.extension().and_then(|e| e.to_str()) != Some("json")
                 || filename == "audit.jsonl"
             {
@@ -319,7 +320,7 @@ pub fn list_proposals(status_filter: Option<ProposalStatus>) -> Result<Vec<(Path
                     } else {
                         proposals.push((path, proposal));
                     }
-                },
+                }
                 Err(_e) => {
                     // Skip silently - might be a non-proposal JSON file
                 }
@@ -342,11 +343,7 @@ pub fn find_proposal(id: &str) -> Result<(PathBuf, Proposal)> {
     match matches.len() {
         0 => bail!("no proposal found with id {}", id),
         1 => Ok(matches.into_iter().next().unwrap()),
-        _ => bail!(
-            "ambiguous id {}: matches {} proposals",
-            id,
-            matches.len()
-        ),
+        _ => bail!("ambiguous id {}: matches {} proposals", id, matches.len()),
     }
 }
 
@@ -394,25 +391,25 @@ pub fn generate_proposal_id(slug: &str) -> String {
 
 /// Sort graph nodes deterministically (by kind, then id).
 pub fn sort_graph_nodes(graph: &mut GraphDoc) {
-    graph.nodes.sort_by(|a, b| {
-        a.kind.cmp(&b.kind).then_with(|| a.id.cmp(&b.id))
-    });
+    graph
+        .nodes
+        .sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.id.cmp(&b.id)));
 }
 
 /// Lock a file for exclusive write access (blocks until lock is acquired).
 /// Returns a guard that releases the lock when dropped.
 pub fn lock_graph_file(path: &Path) -> Result<fs::File> {
     use fs2::FileExt;
-    
+
     let file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
         .open(path)
         .with_context(|| format!("open graph file for locking: {}", path.display()))?;
-    
+
     file.lock_exclusive()
         .with_context(|| format!("acquire exclusive lock on {}", path.display()))?;
-    
+
     Ok(file)
 }
 
@@ -456,15 +453,15 @@ pub fn accept_proposal_safe(
     sort_graph_nodes(&mut graph);
 
     // 5. Validate result (basic schema check)
-    let updated_content = serde_json::to_string_pretty(&graph)
-        .context("serialize updated graph")?;
+    let updated_content =
+        serde_json::to_string_pretty(&graph).context("serialize updated graph")?;
 
     // 6. Write back to disk
     std::fs::write(&graph_path, &updated_content)
         .with_context(|| format!("write updated graph to {}", graph_path.display()))?;
 
     // 7. Compute hash
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(updated_content.as_bytes());
     let hash = format!("{:x}", hasher.finalize());

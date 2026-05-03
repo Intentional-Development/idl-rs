@@ -1,3 +1,5 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 // FFI bindings for Swift/SwiftUI macOS Workbench
 //
 // This crate exposes idl-core functionality through a C-compatible FFI.
@@ -40,8 +42,8 @@ fn parse_graph_internal(path_str: &str) -> Result<String, String> {
     }
 
     // Discover .idl files in directory
-    let idl_files = discover_idl_files(path)
-        .map_err(|e| format!("failed to discover IDL files: {}", e))?;
+    let idl_files =
+        discover_idl_files(path).map_err(|e| format!("failed to discover IDL files: {}", e))?;
 
     if idl_files.is_empty() {
         return Err(format!("no .idl files found in: {}", path_str));
@@ -57,7 +59,7 @@ fn parse_graph_internal(path_str: &str) -> Result<String, String> {
             .map_err(|e| format!("failed to parse {:?}: {:?}", file_path, e))?;
 
         let lifted = lift_document(&doc, file_path.to_string_lossy().as_ref());
-        
+
         // Merge nodes and edges
         for (_, node) in lifted.graph.nodes {
             combined_graph.add_node(node);
@@ -73,7 +75,7 @@ fn parse_graph_internal(path_str: &str) -> Result<String, String> {
 
 fn discover_idl_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, String> {
     let mut files = Vec::new();
-    
+
     if dir.is_file() {
         if dir.extension().and_then(|s| s.to_str()) == Some("idl") {
             files.push(dir.to_path_buf());
@@ -143,7 +145,10 @@ fn block_to_kernel(block: &idl_core::Block) -> Option<(idl_graph::NodeKind, Stri
         idl_core::Block::Policy(b) => (idl_graph::NodeKind::Policy, b.name.clone()),
         idl_core::Block::Api(b) => (idl_graph::NodeKind::Api, b.name.clone()),
         idl_core::Block::Mapping(b) => (idl_graph::NodeKind::Mapping, b.name.clone()),
-        idl_core::Block::TraceLink(b) => (idl_graph::NodeKind::TraceLink, format!("{}__{}", b.from, b.to)),
+        idl_core::Block::TraceLink(b) => (
+            idl_graph::NodeKind::TraceLink,
+            format!("{}__{}", b.from, b.to),
+        ),
         idl_core::Block::Decision(b) => (idl_graph::NodeKind::Decision, b.name.clone()),
         idl_core::Block::Verification(b) => (idl_graph::NodeKind::Verification, b.name.clone()),
         _ => return None,
@@ -192,8 +197,8 @@ enum ValidationError {
 }
 
 fn validate_graph_internal(json_str: &str) -> Result<(), ValidationError> {
-    let graph: idl_graph::Graph = serde_json::from_str(json_str)
-        .map_err(|_| ValidationError::InvalidJson)?;
+    let graph: idl_graph::Graph =
+        serde_json::from_str(json_str).map_err(|_| ValidationError::InvalidJson)?;
 
     if graph.nodes.is_empty() && graph.edges.is_empty() {
         return Err(ValidationError::InvalidSchema);
@@ -228,11 +233,11 @@ pub extern "C" fn idl_classify_behavior(json: *const c_char) -> *mut c_char {
 }
 
 fn classify_behavior_internal(json_str: &str) -> Result<String, String> {
-    let graph: idl_graph::Graph = serde_json::from_str(json_str)
-        .map_err(|e| format!("invalid graph JSON: {}", e))?;
+    let graph: idl_graph::Graph =
+        serde_json::from_str(json_str).map_err(|e| format!("invalid graph JSON: {}", e))?;
 
     let mut classifications = std::collections::HashMap::new();
-    
+
     for (node_id, node) in &graph.nodes {
         let behavior = classify_node_kind(&node.kind);
         classifications.insert(node_id.0.clone(), behavior);
@@ -285,11 +290,11 @@ mod tests {
     fn test_parse_graph_null_path() {
         let result = idl_parse_graph(std::ptr::null());
         assert!(!result.is_null());
-        
+
         let result_str = unsafe { CStr::from_ptr(result).to_str().unwrap() };
         assert!(result_str.contains("error"));
         assert!(result_str.contains("null path"));
-        
+
         idl_free_string(result);
     }
 
@@ -298,11 +303,11 @@ mod tests {
         let path = CString::new("/nonexistent/path/12345").unwrap();
         let result = idl_parse_graph(path.as_ptr());
         assert!(!result.is_null());
-        
+
         let result_str = unsafe { CStr::from_ptr(result).to_str().unwrap() };
         assert!(result_str.contains("error"));
         assert!(result_str.contains("does not exist"));
-        
+
         idl_free_string(result);
     }
 
@@ -333,18 +338,18 @@ mod tests {
         let valid_graph = CString::new(r#"{"nodes":{},"edges":{}}"#).unwrap();
         let code = idl_validate_graph(valid_graph.as_ptr());
         // Should get some response (not crash)
-        assert!(code >= 0 && code <= 4, "Should return valid error code");
+        assert!((0..=4).contains(&code), "Should return valid error code");
     }
 
     #[test]
     fn test_classify_behavior_null() {
         let result = idl_classify_behavior(std::ptr::null());
         assert!(!result.is_null());
-        
+
         let result_str = unsafe { CStr::from_ptr(result).to_str().unwrap() };
         assert!(result_str.contains("error"));
         assert!(result_str.contains("null json"));
-        
+
         idl_free_string(result);
     }
 
@@ -353,10 +358,10 @@ mod tests {
         let bad_json = CString::new("not json").unwrap();
         let result = idl_classify_behavior(bad_json.as_ptr());
         assert!(!result.is_null());
-        
+
         let result_str = unsafe { CStr::from_ptr(result).to_str().unwrap() };
         assert!(result_str.contains("error"));
-        
+
         idl_free_string(result);
     }
 
@@ -364,15 +369,15 @@ mod tests {
     fn test_classify_behavior_basic() {
         // Test that classify_behavior returns valid JSON for any input graph
         let graph_json = CString::new(r#"{"nodes":{},"edges":{}}"#).unwrap();
-        
+
         let result = idl_classify_behavior(graph_json.as_ptr());
         assert!(!result.is_null());
-        
+
         let result_str = unsafe { CStr::from_ptr(result).to_str().unwrap() };
         // Should get valid JSON back (either error or empty classifications)
-        let _json: serde_json::Value = serde_json::from_str(result_str)
-            .expect("classify_behavior should return valid JSON");
-        
+        let _json: serde_json::Value =
+            serde_json::from_str(result_str).expect("classify_behavior should return valid JSON");
+
         idl_free_string(result);
     }
 
@@ -387,13 +392,13 @@ mod tests {
         let graph_json = CString::new(r#"{"nodes":{"entity::X":{"id":"entity::X","kind":"entity","state":"accepted","props":{},"source_anchors":[],"confidence":null}},"edges":{}}"#).unwrap();
         let result = idl_classify_behavior(graph_json.as_ptr());
         assert!(!result.is_null());
-        
+
         // Read the result
         let _result_str = unsafe { CStr::from_ptr(result).to_str().unwrap() };
-        
+
         // Free it
         idl_free_string(result);
-        
+
         // Should not double-free or crash
     }
 }

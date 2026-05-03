@@ -46,7 +46,12 @@ pub struct Session {
 
 impl Session {
     /// Build a fresh session with a deterministic id under `intent_dir`.
-    pub fn new(intent_dir: &Path, topic: impl Into<String>, model: impl Into<String>, rounds_planned: u32) -> Result<Self> {
+    pub fn new(
+        intent_dir: &Path,
+        topic: impl Into<String>,
+        model: impl Into<String>,
+        rounds_planned: u32,
+    ) -> Result<Self> {
         let id = generate_session_id();
         let root = sessions_root(intent_dir).join(&id);
         std::fs::create_dir_all(&root).with_context(|| format!("create {}", root.display()))?;
@@ -68,8 +73,8 @@ impl Session {
     pub fn load(intent_dir: &Path, id: &str) -> Result<Self> {
         let root = sessions_root(intent_dir).join(id);
         let path = root.join("session.json");
-        let text = std::fs::read_to_string(&path)
-            .with_context(|| format!("read {}", path.display()))?;
+        let text =
+            std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
         let mut s: Session = serde_json::from_str(&text).context("parse session.json")?;
         s.root = root;
         // Re-load rounds from disk to keep storage as source of truth.
@@ -80,8 +85,8 @@ impl Session {
                 break;
             }
             let r_text = std::fs::read_to_string(&rp)?;
-            let r: Round = serde_json::from_str(&r_text)
-                .with_context(|| format!("parse {}", rp.display()))?;
+            let r: Round =
+                serde_json::from_str(&r_text).with_context(|| format!("parse {}", rp.display()))?;
             s.rounds.push(r);
         }
         Ok(s)
@@ -206,8 +211,11 @@ fn days_to_ymd(mut days: i64) -> (i32, u32, u32) {
     days += 719_468;
     let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
     let doe = (days - era * 146_097) as u32;
-    let yoe =
-        (doe.wrapping_sub(doe / 1460).wrapping_sub(doe / 36_524).wrapping_add(doe / 146_096)) / 365;
+    let yoe = (doe
+        .wrapping_sub(doe / 1460)
+        .wrapping_sub(doe / 36_524)
+        .wrapping_add(doe / 146_096))
+        / 365;
     let y = yoe as i64 + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;

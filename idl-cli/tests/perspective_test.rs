@@ -21,7 +21,9 @@ fn perspective_markdown_filters_for_product_manager() {
         .arg(fixture())
         .assert()
         .success()
-        .stdout(predicate::str::contains("# IDL Perspective: product-manager"))
+        .stdout(predicate::str::contains(
+            "# IDL Perspective: product-manager",
+        ))
         .stdout(predicate::str::contains("intent:online-shopping"))
         .stdout(predicate::str::contains("decision:use-event-sourcing"))
         .stdout(predicate::str::contains("entity:order").not());

@@ -1,6 +1,6 @@
 use crate::traits::Extractor;
-use idl_core::IdlDocument;
 use anyhow::Result;
+use idl_core::IdlDocument;
 
 pub struct JavaScriptExtractor;
 

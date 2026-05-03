@@ -11,10 +11,12 @@ use anyhow::{Context, Result};
 use idl_graph::{GraphDoc, NodeDoc};
 
 pub mod openapi;
+pub mod python;
 pub mod rust;
 pub mod typescript;
 
 pub use openapi::OpenApiEmitter;
+pub use python::PythonEmitter;
 pub use rust::RustEmitter;
 pub use typescript::TypeScriptEmitter;
 
@@ -53,8 +55,7 @@ impl EmitReport {
                 std::fs::create_dir_all(parent)
                     .with_context(|| format!("create dir {}", parent.display()))?;
             }
-            std::fs::write(&abs, &f.content)
-                .with_context(|| format!("write {}", abs.display()))?;
+            std::fs::write(&abs, &f.content).with_context(|| format!("write {}", abs.display()))?;
         }
         Ok(())
     }

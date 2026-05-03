@@ -62,11 +62,7 @@ fn default_constraints_pass_on_fixture() {
     g.add_edge(edge("e1", EdgeKind::Realizes, "api-1", "intent-1"));
 
     let report = g.validate(&default_constraints());
-    assert!(
-        report.ok(),
-        "expected no errors, got {:?}",
-        report.errors
-    );
+    assert!(report.ok(), "expected no errors, got {:?}", report.errors);
     assert_eq!(report.checked.len(), 6);
 }
 

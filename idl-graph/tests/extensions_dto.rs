@@ -1,7 +1,11 @@
+#![allow(deprecated)]
 //! Wave 12 — DTO extension namespace tests (RFC dto-node-kind, Direction C).
 
 use idl_graph::{
-    extensions_dto::{parse_dtos, project_field_set, validate_dtos, DtoDefinition, DtoExtra, DtoKind},
+    extensions_dto::{
+        parse_dtos, project_field_set, validate_dtos, DtoDefinition, DtoDiscriminator, DtoExtra,
+        DtoKind,
+    },
     GraphDoc, NodeDoc,
 };
 use serde_json::json;
@@ -103,7 +107,11 @@ fn validate_happy_pick_and_required() {
             "pick": ["email", "password"],
             "required": ["email", "password"]
         }]),
-        vec![op_with_dto("operation:login-user", "accepts", "dto:LoginUser")],
+        vec![op_with_dto(
+            "operation:login-user",
+            "accepts",
+            "dto:LoginUser",
+        )],
     );
     let v = validate_dtos(&g);
     assert!(v.is_empty(), "expected no violations, got {v:?}");
@@ -226,10 +234,7 @@ fn validate_error_op_dto_ref_unresolved() {
         )],
     );
     let v = validate_dtos(&g);
-    assert!(
-        v.iter().any(|e| e.rule == "dto-accepts-resolves"),
-        "{v:?}"
-    );
+    assert!(v.iter().any(|e| e.rule == "dto-accepts-resolves"), "{v:?}");
 }
 
 #[test]
@@ -280,7 +285,12 @@ fn project_field_set_omit_plus_extras() {
             let mut m = BTreeMap::new();
             m.insert(
                 "token".into(),
-                DtoExtra { ty: "string".into(), optional: false, format: None, nullable: false },
+                DtoExtra {
+                    ty: "string".into(),
+                    optional: false,
+                    format: None,
+                    nullable: false,
+                },
             );
             m
         },
@@ -294,8 +304,10 @@ fn project_field_set_omit_plus_extras() {
         .collect();
     #[allow(deprecated)]
     let projected = project_field_set(&dto, &base);
-    let want: BTreeSet<String> =
-        ["email", "username", "bio", "image", "token"].iter().map(|s| s.to_string()).collect();
+    let want: BTreeSet<String> = ["email", "username", "bio", "image", "token"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     assert_eq!(projected, want);
 }
 
@@ -340,7 +352,7 @@ fn array_alias_round_trip() {
 
 #[test]
 fn union_round_trip() {
-    use idl_graph::extensions_dto::{DtoDefinition, DtoKind, DtoVariant, DtoDiscriminator};
+    use idl_graph::extensions_dto::{DtoDefinition, DtoKind, DtoVariant};
     let dto = DtoDefinition {
         id: "dto:TransactionRead".into(),
         kind: DtoKind::Union,
@@ -353,8 +365,16 @@ fn union_round_trip() {
         nullable: false,
         items: None,
         variants: Some(vec![
-            DtoVariant { ty: None, ref_: Some("dto:TransactionSplit".into()), array: false },
-            DtoVariant { ty: None, ref_: Some("dto:TransactionDefault".into()), array: false },
+            DtoVariant {
+                ty: None,
+                ref_: Some("dto:TransactionSplit".into()),
+                array: false,
+            },
+            DtoVariant {
+                ty: None,
+                ref_: Some("dto:TransactionDefault".into()),
+                array: false,
+            },
         ]),
         discriminator: None,
         cursor_field: None,
@@ -381,11 +401,11 @@ fn union_round_trip() {
 
 #[test]
 fn union_with_discriminator_round_trip() {
-    use idl_graph::extensions_dto::{DtoDefinition, DtoKind, DtoVariant, DtoDiscriminator};
+    use idl_graph::extensions_dto::{DtoDefinition, DtoKind, DtoVariant};
     let mut mapping = BTreeMap::new();
     mapping.insert("split".into(), "dto:TransactionSplit".into());
     mapping.insert("default".into(), "dto:TransactionDefault".into());
-    
+
     let dto = DtoDefinition {
         id: "dto:TransactionRead".into(),
         kind: DtoKind::Union,
@@ -398,8 +418,16 @@ fn union_with_discriminator_round_trip() {
         nullable: false,
         items: None,
         variants: Some(vec![
-            DtoVariant { ty: None, ref_: Some("dto:TransactionSplit".into()), array: false },
-            DtoVariant { ty: None, ref_: Some("dto:TransactionDefault".into()), array: false },
+            DtoVariant {
+                ty: None,
+                ref_: Some("dto:TransactionSplit".into()),
+                array: false,
+            },
+            DtoVariant {
+                ty: None,
+                ref_: Some("dto:TransactionDefault".into()),
+                array: false,
+            },
         ]),
         discriminator: Some(DtoDiscriminator {
             property: "type".into(),
@@ -429,7 +457,7 @@ fn union_with_discriminator_round_trip() {
 
 #[test]
 fn nullable_on_extras() {
-    use idl_graph::extensions_dto::{DtoDefinition, DtoKind, DtoExtra};
+    use idl_graph::extensions_dto::{DtoDefinition, DtoExtra, DtoKind};
     let mut extras = BTreeMap::new();
     extras.insert(
         "body".into(),
@@ -440,7 +468,7 @@ fn nullable_on_extras() {
             nullable: true,
         },
     );
-    
+
     let dto = DtoDefinition {
         id: "dto:UpdateArticle".into(),
         kind: DtoKind::Object,
@@ -472,7 +500,7 @@ fn nullable_on_extras() {
     let round_trip: DtoDefinition = serde_json::from_value(json.clone()).unwrap();
     assert_eq!(dto, round_trip);
     let body_extra = json.get("extras").unwrap().get("body").unwrap();
-    assert_eq!(body_extra.get("nullable").unwrap().as_bool().unwrap(), true);
+    assert!(body_extra.get("nullable").unwrap().as_bool().unwrap());
 }
 
 #[test]

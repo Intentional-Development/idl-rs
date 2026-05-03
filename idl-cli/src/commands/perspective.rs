@@ -99,7 +99,8 @@ pub fn run(
             .with_context(|| format!("read perspectives config {}", path.display()))?,
         None => DEFAULT_PERSPECTIVES_TOML.to_string(),
     };
-    let config: PerspectivesConfig = toml::from_str(&config_text).context("parse perspectives TOML")?;
+    let config: PerspectivesConfig =
+        toml::from_str(&config_text).context("parse perspectives TOML")?;
     let role_config = config.roles.get(&role).ok_or_else(|| {
         anyhow::anyhow!(
             "unknown perspective role `{}`; available: {}",
@@ -163,6 +164,9 @@ fn print_markdown(role: &str, role_config: &RoleConfig, graph: &GraphDoc) {
     println!();
     println!("## Edges ({})", graph.edges.len());
     for edge in &graph.edges {
-        println!("- `{}`: `{}` -{}-> `{}`", edge.id, edge.from, edge.kind, edge.to);
+        println!(
+            "- `{}`: `{}` -{}-> `{}`",
+            edge.id, edge.from, edge.kind, edge.to
+        );
     }
 }

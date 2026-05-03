@@ -14,11 +14,7 @@ use idl_typeexpr::{expr_to_kind, parse_type_expr, render_type_expr};
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
-fn make_dto_base(
-    id: &str,
-    kind: DtoKind,
-    nullable: bool,
-) -> DtoDefinition {
+fn make_dto_base(id: &str, kind: DtoKind, nullable: bool) -> DtoDefinition {
     DtoDefinition {
         id: id.to_string(),
         kind,
@@ -51,14 +47,17 @@ fn make_dto_base(
 fn assert_shape_eq(original: &DtoDefinition, roundtrip: &DtoDefinition) {
     assert_eq!(original.kind, roundtrip.kind, "kind mismatch");
     assert_eq!(original.nullable, roundtrip.nullable, "nullable mismatch");
-    
+
     match original.kind {
         DtoKind::Object | DtoKind::Enum | DtoKind::Paginated => {
             // Reference types — shape is just the kind
         }
         DtoKind::Map => {
             assert_eq!(original.key_type, roundtrip.key_type, "key_type mismatch");
-            assert_eq!(original.value_type, roundtrip.value_type, "value_type mismatch");
+            assert_eq!(
+                original.value_type, roundtrip.value_type,
+                "value_type mismatch"
+            );
         }
         DtoKind::Unit => {
             // No additional shape
@@ -69,7 +68,11 @@ fn assert_shape_eq(original: &DtoDefinition, roundtrip: &DtoDefinition) {
         DtoKind::Union => {
             let orig_variants = original.variants.as_ref().unwrap();
             let rt_variants = roundtrip.variants.as_ref().unwrap();
-            assert_eq!(orig_variants.len(), rt_variants.len(), "variant count mismatch");
+            assert_eq!(
+                orig_variants.len(),
+                rt_variants.len(),
+                "variant count mismatch"
+            );
             for (a, b) in orig_variants.iter().zip(rt_variants.iter()) {
                 assert_eq!(a, b, "variant mismatch");
             }
@@ -282,7 +285,7 @@ fn roundtrip_10_field_level() {
     let expr = parse_type_expr(&expr_str).unwrap();
     // Field-level TypeExpr does not compile to a standalone DTO
     // (bare primitives are not DTOs). This test just verifies parse round-trip.
-    use idl_typeexpr::{render_expr_ast, TypeExpr, PrimitiveType};
+    use idl_typeexpr::{render_expr_ast, PrimitiveType, TypeExpr};
     assert_eq!(
         expr,
         TypeExpr::Nullable(Box::new(TypeExpr::Primitive(PrimitiveType::String)))
@@ -313,7 +316,7 @@ fn test_parse_error_lowercase_reference() {
 
 #[test]
 fn test_compile_error_bare_primitive() {
-    use idl_typeexpr::{TypeExpr, PrimitiveType};
+    use idl_typeexpr::{PrimitiveType, TypeExpr};
     let expr = TypeExpr::Primitive(PrimitiveType::String);
     let result = expr_to_kind(&expr, "Invalid");
     assert!(result.is_err());

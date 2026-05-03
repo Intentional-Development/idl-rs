@@ -1,3 +1,4 @@
+#![allow(clippy::ptr_arg)]
 //! Round-trip integration tests for proposal workflows.
 //!
 //! Tests cover the complete proposal lifecycle:
@@ -9,26 +10,31 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Barrier, Mutex, MutexGuard, OnceLock};
 use std::thread;
 
 use serde_json::json;
 use tempfile::TempDir;
 
 use idl_proposals::{
-    accept_proposal_safe, audit_log, find_proposal, list_proposals,
-    DiffOp, FieldAction, Proposal, ProposalStatus,
+    accept_proposal_safe, audit_log, find_proposal, list_proposals, DiffOp, FieldAction, Proposal,
+    ProposalStatus,
 };
+
+static CWD_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 /// Helper: Guard to restore current directory on drop (RAII pattern)
 struct DirGuard {
     original_dir: PathBuf,
+    _guard: MutexGuard<'static, ()>,
 }
 
 impl DirGuard {
     fn new() -> anyhow::Result<Self> {
+        let guard = CWD_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
         Ok(Self {
             original_dir: std::env::current_dir()?,
+            _guard: guard,
         })
     }
 }
@@ -77,13 +83,19 @@ fn create_and_save_proposal(
 
     let proposal_path = changes_dir.join(format!("{}.proposal.json", id));
     proposal.save(&proposal_path)?;
-    
+
     // Log creation to audit trail (needs to be in correct dir)
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(temp_path)?;
-    audit_log("create", &proposal.id, "test-agent", Some("integration-test"), None)?;
+    audit_log(
+        "create",
+        &proposal.id,
+        "test-agent",
+        Some("integration-test"),
+        None,
+    )?;
     std::env::set_current_dir(original_dir)?;
-    
+
     Ok(proposal_path)
 }
 
@@ -91,7 +103,7 @@ fn create_and_save_proposal(
 fn verify_audit_entries(changes_dir: &PathBuf, expected_actions: &[&str]) -> anyhow::Result<()> {
     let audit_path = changes_dir.join("audit.jsonl");
     let audit_content = fs::read_to_string(&audit_path)?;
-    
+
     let lines: Vec<&str> = audit_content.lines().collect();
     assert_eq!(
         lines.len(),
@@ -100,7 +112,7 @@ fn verify_audit_entries(changes_dir: &PathBuf, expected_actions: &[&str]) -> any
         expected_actions.len(),
         lines.len()
     );
-    
+
     for (line, expected_action) in lines.iter().zip(expected_actions.iter()) {
         let entry: serde_json::Value = serde_json::from_str(line)?;
         assert_eq!(entry["action"].as_str().unwrap(), *expected_action);
@@ -108,7 +120,7 @@ fn verify_audit_entries(changes_dir: &PathBuf, expected_actions: &[&str]) -> any
         assert!(entry["proposal_id"].is_string());
         assert!(entry["author"].is_string());
     }
-    
+
     Ok(())
 }
 
@@ -117,13 +129,13 @@ fn verify_audit_entries(changes_dir: &PathBuf, expected_actions: &[&str]) -> any
 /// Accept it. Verify graph mutated correctly. Verify audit trail.
 #[test]
 fn test_happy_path_accept() -> anyhow::Result<()> {
-    let _dir_guard = DirGuard::new()?;  // Ensure we restore directory on exit
-    
+    let _dir_guard = DirGuard::new()?; // Ensure we restore directory on exit
+
     let temp = TempDir::new()?;
     let graph_path = temp.path().join("test.graph.json");
     let changes_dir = temp.path().join("changes");
     fs::create_dir_all(&changes_dir)?;
-    
+
     // Create initial graph with one DTO
     create_test_graph(
         &graph_path,
@@ -147,7 +159,7 @@ fn test_happy_path_accept() -> anyhow::Result<()> {
             }
         ]),
     )?;
-    
+
     // Create proposal with 3 operations
     let diff_ops = vec![
         // Op 1: Add a new DTO
@@ -187,48 +199,60 @@ fn test_happy_path_accept() -> anyhow::Result<()> {
             new_kind: "entity".to_string(),
         },
     ];
-    
+
     let proposal_id = "20260501120000-multi-op";
-    create_and_save_proposal(&changes_dir, proposal_id, graph_path.to_str().unwrap(), diff_ops, temp.path())?;
-    
+    create_and_save_proposal(
+        &changes_dir,
+        proposal_id,
+        graph_path.to_str().unwrap(),
+        diff_ops,
+        temp.path(),
+    )?;
+
     // Accept proposal
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(temp.path())?;
     let hash = accept_proposal_safe(proposal_id, "test-reviewer", Some("integration-test"))?;
     std::env::set_current_dir(original_dir)?;
-    
+
     // Verify hash is non-empty
     assert!(!hash.is_empty());
     assert_eq!(hash.len(), 64); // SHA256 hex is 64 chars
-    
+
     // Verify graph was mutated
     let updated_graph: serde_json::Value = serde_json::from_str(&fs::read_to_string(&graph_path)?)?;
     let nodes = updated_graph["nodes"].as_array().unwrap();
     assert_eq!(nodes.len(), 2, "Should have 2 nodes after adding NewUser");
-    
+
     // Verify new DTO was added
-    let new_user = nodes.iter().find(|n| n["id"] == "dto:NewUser").expect("NewUser not found");
+    let new_user = nodes
+        .iter()
+        .find(|n| n["id"] == "dto:NewUser")
+        .expect("NewUser not found");
     assert_eq!(new_user["kind"], "dto");
-    
+
     // Verify field was added to existing DTO
-    let existing = nodes.iter().find(|n| n["id"] == "dto:Existing").expect("Existing not found");
+    let existing = nodes
+        .iter()
+        .find(|n| n["id"] == "dto:Existing")
+        .expect("Existing not found");
     assert_eq!(existing["kind"], "entity"); // Kind changed
     let fields = existing["props"]["dto_props"]["fields"].as_array().unwrap();
     assert_eq!(fields.len(), 2, "Should have 2 fields after adding email");
     assert!(fields.iter().any(|f| f["name"] == "email"));
-    
+
     // Verify proposal status is accepted
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(temp.path())?;
     let (_, updated_proposal) = find_proposal(proposal_id)?;
     std::env::set_current_dir(original_dir)?;
-    
+
     assert_eq!(updated_proposal.status, ProposalStatus::Accepted);
     assert!(updated_proposal.updated_at.is_some());
-    
+
     // Verify audit trail has 2 entries: create + accept
     verify_audit_entries(&changes_dir, &["create", "accept"])?;
-    
+
     Ok(())
 }
 
@@ -236,13 +260,13 @@ fn test_happy_path_accept() -> anyhow::Result<()> {
 /// Create proposal, reject with reason. Verify graph UNCHANGED. Verify audit.
 #[test]
 fn test_reject_path() -> anyhow::Result<()> {
-    let _dir_guard = DirGuard::new()?;  // Ensure we restore directory on exit
-    
+    let _dir_guard = DirGuard::new()?; // Ensure we restore directory on exit
+
     let temp = TempDir::new()?;
     let graph_path = temp.path().join("test.graph.json");
     let changes_dir = temp.path().join("changes");
     fs::create_dir_all(&changes_dir)?;
-    
+
     // Create initial graph
     create_test_graph(
         &graph_path,
@@ -260,10 +284,10 @@ fn test_reject_path() -> anyhow::Result<()> {
             }
         ]),
     )?;
-    
+
     // Compute original hash
     let original_content = fs::read_to_string(&graph_path)?;
-    
+
     // Create proposal
     let diff_ops = vec![DiffOp::AddDto {
         dto: serde_json::from_value(json!({
@@ -278,7 +302,7 @@ fn test_reject_path() -> anyhow::Result<()> {
             }
         }))?,
     }];
-    
+
     let proposal_id = "20260501130000-unwanted";
     let proposal_path = create_and_save_proposal(
         &changes_dir,
@@ -287,7 +311,7 @@ fn test_reject_path() -> anyhow::Result<()> {
         diff_ops,
         temp.path(),
     )?;
-    
+
     // Reject proposal
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(temp.path())?;
@@ -302,32 +326,35 @@ fn test_reject_path() -> anyhow::Result<()> {
         Some(json!({"reason": "Does not align with architecture"})),
     )?;
     std::env::set_current_dir(original_dir)?;
-    
+
     // Verify graph UNCHANGED
     let current_content = fs::read_to_string(&graph_path)?;
-    assert_eq!(original_content, current_content, "Graph should be unchanged after rejection");
-    
+    assert_eq!(
+        original_content, current_content,
+        "Graph should be unchanged after rejection"
+    );
+
     let graph: serde_json::Value = serde_json::from_str(&current_content)?;
     let nodes = graph["nodes"].as_array().unwrap();
     assert_eq!(nodes.len(), 1, "Should still have only 1 node");
     assert_eq!(nodes[0]["id"], "dto:Original");
-    
+
     // Verify proposal status is rejected
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(temp.path())?;
     let (_, updated_proposal) = find_proposal(proposal_id)?;
     std::env::set_current_dir(original_dir)?;
-    
+
     assert_eq!(updated_proposal.status, ProposalStatus::Rejected);
     assert_eq!(
         updated_proposal.rejection_reason.as_ref().unwrap(),
         "Does not align with architecture"
     );
     assert!(updated_proposal.updated_at.is_some());
-    
+
     // Verify audit trail has 2 entries: create + reject
     verify_audit_entries(&changes_dir, &["create", "reject"])?;
-    
+
     Ok(())
 }
 
@@ -336,20 +363,20 @@ fn test_reject_path() -> anyhow::Result<()> {
 /// Verify only one mutates at a time, final state consistent, no torn writes.
 #[test]
 fn test_concurrent_accept_file_lock() -> anyhow::Result<()> {
-    let _dir_guard = DirGuard::new()?;  // Ensure we restore directory on exit
-    
+    let _dir_guard = DirGuard::new()?; // Ensure we restore directory on exit
+
     let temp = TempDir::new()?;
     let graph_path = temp.path().join("test.graph.json");
     let changes_dir = temp.path().join("changes");
     fs::create_dir_all(&changes_dir)?;
-    
+
     // Create initial empty graph
     create_test_graph(&graph_path, json!([]))?;
-    
+
     // Create two proposals that add different DTOs
     let proposal_id_1 = "20260501140000-concurrent-1";
     let proposal_id_2 = "20260501140001-concurrent-2";
-    
+
     create_and_save_proposal(
         &changes_dir,
         proposal_id_1,
@@ -369,7 +396,7 @@ fn test_concurrent_accept_file_lock() -> anyhow::Result<()> {
         }],
         temp.path(),
     )?;
-    
+
     create_and_save_proposal(
         &changes_dir,
         proposal_id_2,
@@ -389,16 +416,16 @@ fn test_concurrent_accept_file_lock() -> anyhow::Result<()> {
         }],
         temp.path(),
     )?;
-    
+
     // Synchronize threads
     let barrier = Arc::new(Barrier::new(2));
     let temp_path = Arc::new(temp.path().to_path_buf());
-    
+
     let barrier1 = Arc::clone(&barrier);
     let barrier2 = Arc::clone(&barrier);
     let temp_path1 = Arc::clone(&temp_path);
     let temp_path2 = Arc::clone(&temp_path);
-    
+
     // Spawn two threads that accept proposals simultaneously
     // Both threads will work in the same temp directory to avoid directory race conditions
     let handle1 = thread::spawn(move || {
@@ -406,44 +433,47 @@ fn test_concurrent_accept_file_lock() -> anyhow::Result<()> {
         barrier1.wait(); // Synchronize start
         accept_proposal_safe(proposal_id_1, "test-reviewer-1", Some("integration-test"))
     });
-    
+
     let handle2 = thread::spawn(move || {
         std::env::set_current_dir(&*temp_path2).unwrap();
         barrier2.wait(); // Synchronize start
         accept_proposal_safe(proposal_id_2, "test-reviewer-2", Some("integration-test"))
     });
-    
+
     // Wait for both threads
     let result1 = handle1.join().expect("thread 1 panicked");
     let result2 = handle2.join().expect("thread 2 panicked");
-    
+
     // Both should succeed (file lock prevents corruption)
     assert!(result1.is_ok(), "Proposal 1 should succeed: {:?}", result1);
     assert!(result2.is_ok(), "Proposal 2 should succeed: {:?}", result2);
-    
+
     // Verify final graph state
     let final_graph: serde_json::Value = serde_json::from_str(&fs::read_to_string(&graph_path)?)?;
     let nodes = final_graph["nodes"].as_array().unwrap();
     assert_eq!(nodes.len(), 2, "Should have both DTOs added");
-    
+
     let ids: Vec<&str> = nodes.iter().map(|n| n["id"].as_str().unwrap()).collect();
     assert!(ids.contains(&"dto:Concurrent1"));
     assert!(ids.contains(&"dto:Concurrent2"));
-    
+
     // Verify graph is valid JSON (no torn writes)
     let graph_content = fs::read_to_string(&graph_path)?;
     let _parsed: serde_json::Value = serde_json::from_str(&graph_content)
         .expect("Graph should be valid JSON after concurrent writes");
-    
+
     // Verify both proposals are marked accepted
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(temp.path())?;
     let proposals = list_proposals(None)?;
     std::env::set_current_dir(original_dir)?;
-    
-    let accepted_count = proposals.iter().filter(|(_, p)| p.status == ProposalStatus::Accepted).count();
+
+    let accepted_count = proposals
+        .iter()
+        .filter(|(_, p)| p.status == ProposalStatus::Accepted)
+        .count();
     assert_eq!(accepted_count, 2, "Both proposals should be accepted");
-    
+
     Ok(())
 }
 
@@ -452,13 +482,13 @@ fn test_concurrent_accept_file_lock() -> anyhow::Result<()> {
 /// Verify accept fails cleanly, graph UNCHANGED, audit shows attempt + failure.
 #[test]
 fn test_failed_apply_rollback() -> anyhow::Result<()> {
-    let _dir_guard = DirGuard::new()?;  // Ensure we restore directory on exit
-    
+    let _dir_guard = DirGuard::new()?; // Ensure we restore directory on exit
+
     let temp = TempDir::new()?;
     let graph_path = temp.path().join("test.graph.json");
     let changes_dir = temp.path().join("changes");
     fs::create_dir_all(&changes_dir)?;
-    
+
     // Create initial graph
     create_test_graph(
         &graph_path,
@@ -476,10 +506,10 @@ fn test_failed_apply_rollback() -> anyhow::Result<()> {
             }
         ]),
     )?;
-    
+
     // Compute original content hash
     let original_content = fs::read_to_string(&graph_path)?;
-    
+
     // Create proposal with invalid operation (remove nonexistent node)
     let diff_ops = vec![
         DiffOp::AddDto {
@@ -499,44 +529,59 @@ fn test_failed_apply_rollback() -> anyhow::Result<()> {
             node_id: "dto:NonExistent".to_string(),
         },
     ];
-    
+
     let proposal_id = "20260501150000-invalid";
-    create_and_save_proposal(&changes_dir, proposal_id, graph_path.to_str().unwrap(), diff_ops, temp.path())?;
-    
+    create_and_save_proposal(
+        &changes_dir,
+        proposal_id,
+        graph_path.to_str().unwrap(),
+        diff_ops,
+        temp.path(),
+    )?;
+
     // Attempt to accept proposal (should fail)
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(temp.path())?;
     let result = accept_proposal_safe(proposal_id, "test-reviewer", Some("integration-test"));
     std::env::set_current_dir(original_dir)?;
-    
+
     assert!(result.is_err(), "Accept should fail for invalid operation");
     let err_msg = result.unwrap_err().to_string();
     assert!(
-        err_msg.contains("not found") || err_msg.contains("NonExistent") || err_msg.contains("apply diff ops"),
+        err_msg.contains("not found")
+            || err_msg.contains("NonExistent")
+            || err_msg.contains("apply diff ops"),
         "Error should mention missing node or apply failure: {}",
         err_msg
     );
-    
+
     // Verify graph is UNCHANGED (rollback worked)
     let current_content = fs::read_to_string(&graph_path)?;
-    assert_eq!(original_content, current_content, "Graph should be unchanged after failed apply");
-    
+    assert_eq!(
+        original_content, current_content,
+        "Graph should be unchanged after failed apply"
+    );
+
     let graph: serde_json::Value = serde_json::from_str(&current_content)?;
     let nodes = graph["nodes"].as_array().unwrap();
     assert_eq!(nodes.len(), 1, "Should still have only 1 node");
     assert_eq!(nodes[0]["id"], "dto:Existing");
-    
+
     // Verify proposal is still pending (not marked accepted)
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(temp.path())?;
     let (_, proposal) = find_proposal(proposal_id)?;
     std::env::set_current_dir(original_dir)?;
-    
-    assert_eq!(proposal.status, ProposalStatus::Pending, "Proposal should remain pending after failed apply");
-    
+
+    assert_eq!(
+        proposal.status,
+        ProposalStatus::Pending,
+        "Proposal should remain pending after failed apply"
+    );
+
     // Verify audit trail has only create entry (no accept since it failed)
     verify_audit_entries(&changes_dir, &["create"])?;
-    
+
     Ok(())
 }
 
@@ -544,12 +589,12 @@ fn test_failed_apply_rollback() -> anyhow::Result<()> {
 /// Try to create proposal with malformed op JSON. Verify rejection with clear error.
 #[test]
 fn test_schema_validation() -> anyhow::Result<()> {
-    let _dir_guard = DirGuard::new()?;  // Ensure we restore directory on exit
-    
+    let _dir_guard = DirGuard::new()?; // Ensure we restore directory on exit
+
     let temp = TempDir::new()?;
     let changes_dir = temp.path().join("changes");
     fs::create_dir_all(&changes_dir)?;
-    
+
     // Create a malformed proposal JSON (missing required fields)
     let malformed_json = json!({
         "version": "0.1.0",
@@ -560,37 +605,42 @@ fn test_schema_validation() -> anyhow::Result<()> {
         "status": "pending",
         "created_at": "2026-05-01T16:00:00Z"
     });
-    
+
     let proposal_path = changes_dir.join("20260501160000-malformed.proposal.json");
-    fs::write(&proposal_path, serde_json::to_string_pretty(&malformed_json)?)?;
-    
+    fs::write(
+        &proposal_path,
+        serde_json::to_string_pretty(&malformed_json)?,
+    )?;
+
     // Try to load the malformed proposal
     let result = Proposal::load(&proposal_path);
     assert!(result.is_err(), "Loading malformed proposal should fail");
-    
+
     let err_msg = result.unwrap_err().to_string();
     assert!(
-        err_msg.contains("missing field") || err_msg.contains("target_graph") || err_msg.contains("parse proposal"),
+        err_msg.contains("missing field")
+            || err_msg.contains("target_graph")
+            || err_msg.contains("parse proposal"),
         "Error should mention missing field: {}",
         err_msg
     );
-    
+
     // Create proposal with invalid diff op (missing required field in AddDto)
     let invalid_op_json = json!({
         "op": "add_dto"
         // Missing "dto" field
     });
-    
+
     let result = serde_json::from_value::<DiffOp>(invalid_op_json);
     assert!(result.is_err(), "Parsing invalid diff op should fail");
-    
+
     let err_msg = result.unwrap_err().to_string();
     assert!(
         err_msg.contains("missing field") || err_msg.contains("dto"),
         "Error should mention missing dto field: {}",
         err_msg
     );
-    
+
     // Create proposal with wrong version
     let wrong_version_json = json!({
         "version": "99.99.99",
@@ -601,19 +651,25 @@ fn test_schema_validation() -> anyhow::Result<()> {
         "status": "pending",
         "created_at": "2026-05-01T16:00:00Z"
     });
-    
+
     let proposal_path2 = changes_dir.join("20260501160001-wrong-version.proposal.json");
-    fs::write(&proposal_path2, serde_json::to_string_pretty(&wrong_version_json)?)?;
-    
+    fs::write(
+        &proposal_path2,
+        serde_json::to_string_pretty(&wrong_version_json)?,
+    )?;
+
     let result = Proposal::load(&proposal_path2);
-    assert!(result.is_err(), "Loading wrong-version proposal should fail");
-    
+    assert!(
+        result.is_err(),
+        "Loading wrong-version proposal should fail"
+    );
+
     let err_msg = result.unwrap_err().to_string();
     assert!(
         err_msg.contains("unsupported proposal version") || err_msg.contains("99.99.99"),
         "Error should mention unsupported version: {}",
         err_msg
     );
-    
+
     Ok(())
 }

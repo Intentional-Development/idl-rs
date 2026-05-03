@@ -34,7 +34,9 @@ fn init_greenfield_scaffolds_layout() {
     let intent = tmp.path().join("intent");
     assert!(intent.join("project.idl").is_file());
     assert!(intent.join(".idl/config.json").is_file());
-    assert!(intent.join("changes/0001-initial-intent/state.json").is_file());
+    assert!(intent
+        .join("changes/0001-initial-intent/state.json")
+        .is_file());
     assert!(intent
         .join("changes/0001-initial-intent/intent-delta.idl")
         .is_file());

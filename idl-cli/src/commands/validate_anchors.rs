@@ -15,6 +15,7 @@ use idl_graph::GraphDoc;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Verdict {
@@ -150,9 +151,7 @@ fn check_anchor(
         let end = r.end_line.unwrap_or(0);
         if end > 0 && end > line_count {
             entry.verdict = Verdict::Shifted;
-            entry.note = Some(format!(
-                "end_line {end} > file line count {line_count}"
-            ));
+            entry.note = Some(format!("end_line {end} > file line count {line_count}"));
             return entry;
         }
         if start > 0 && end > 0 && end < start {
@@ -204,11 +203,7 @@ fn bytecount_lines(bytes: &[u8]) -> u64 {
         return 0;
     }
     let lf = bytes.iter().filter(|b| **b == b'\n').count() as u64;
-    if bytes.last().copied() == Some(b'\n') {
-        lf + 1
-    } else {
-        lf + 1
-    }
+    lf + 1
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

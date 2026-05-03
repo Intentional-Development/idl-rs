@@ -50,10 +50,14 @@ fn test_propose_create_with_ops_file() {
         .unwrap()
         .current_dir(temp.path())
         .args([
-            "propose", "create",
-            "--title", "Add User DTO",
-            "--target-graph", graph_path.to_str().unwrap(),
-            "--ops-file", ops_file.to_str().unwrap()
+            "propose",
+            "create",
+            "--title",
+            "Add User DTO",
+            "--target-graph",
+            graph_path.to_str().unwrap(),
+            "--ops-file",
+            ops_file.to_str().unwrap(),
         ])
         .assert()
         .success();
@@ -101,8 +105,9 @@ fn test_propose_list_all() {
     });
     fs::write(
         proposals_dir.join("20261230120000-pending-proposal.json"),
-        serde_json::to_string_pretty(&proposal1).unwrap()
-    ).unwrap();
+        serde_json::to_string_pretty(&proposal1).unwrap(),
+    )
+    .unwrap();
 
     let proposal2 = json!({
         "version": "0.1.0",
@@ -116,8 +121,9 @@ fn test_propose_list_all() {
     });
     fs::write(
         proposals_dir.join("20261230120100-accepted-proposal.json"),
-        serde_json::to_string_pretty(&proposal2).unwrap()
-    ).unwrap();
+        serde_json::to_string_pretty(&proposal2).unwrap(),
+    )
+    .unwrap();
 
     let result = assert_cmd::Command::cargo_bin("idl")
         .unwrap()
@@ -153,8 +159,9 @@ fn test_propose_list_filtered() {
     });
     fs::write(
         proposals_dir.join("20261230120000-pending.json"),
-        serde_json::to_string_pretty(&proposal1).unwrap()
-    ).unwrap();
+        serde_json::to_string_pretty(&proposal1).unwrap(),
+    )
+    .unwrap();
 
     let proposal2 = json!({
         "version": "0.1.0",
@@ -168,8 +175,9 @@ fn test_propose_list_filtered() {
     });
     fs::write(
         proposals_dir.join("20261230120100-accepted.json"),
-        serde_json::to_string_pretty(&proposal2).unwrap()
-    ).unwrap();
+        serde_json::to_string_pretty(&proposal2).unwrap(),
+    )
+    .unwrap();
 
     let result = assert_cmd::Command::cargo_bin("idl")
         .unwrap()
@@ -232,7 +240,11 @@ fn test_propose_accept() {
         "created_at": "2026-12-30T12:00:00Z"
     });
     let proposal_path = proposals_dir.join("20261230120000-add-user.json");
-    fs::write(&proposal_path, serde_json::to_string_pretty(&proposal).unwrap()).unwrap();
+    fs::write(
+        &proposal_path,
+        serde_json::to_string_pretty(&proposal).unwrap(),
+    )
+    .unwrap();
 
     let result = assert_cmd::Command::cargo_bin("idl")
         .unwrap()
@@ -245,17 +257,15 @@ fn test_propose_accept() {
     assert!(output.contains("Accepted: 20261230120000-add-user"));
 
     // Verify graph was updated
-    let updated_graph: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(&graph_path).unwrap()
-    ).unwrap();
+    let updated_graph: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&graph_path).unwrap()).unwrap();
     let nodes = updated_graph["nodes"].as_array().unwrap();
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0]["id"], "dto:User");
 
     // Verify proposal status was updated
-    let updated_proposal: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(&proposal_path).unwrap()
-    ).unwrap();
+    let updated_proposal: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&proposal_path).unwrap()).unwrap();
     assert_eq!(updated_proposal["status"], "accepted");
 
     // Verify audit trail with source="cli"
@@ -284,12 +294,22 @@ fn test_propose_reject() {
         "created_at": "2026-12-30T12:00:00Z"
     });
     let proposal_path = proposals_dir.join("20261230120000-bad-idea.json");
-    fs::write(&proposal_path, serde_json::to_string_pretty(&proposal).unwrap()).unwrap();
+    fs::write(
+        &proposal_path,
+        serde_json::to_string_pretty(&proposal).unwrap(),
+    )
+    .unwrap();
 
     let result = assert_cmd::Command::cargo_bin("idl")
         .unwrap()
         .current_dir(temp.path())
-        .args(["propose", "reject", "20261230120000-bad-idea", "--reason", "Not aligned with architecture"])
+        .args([
+            "propose",
+            "reject",
+            "20261230120000-bad-idea",
+            "--reason",
+            "Not aligned with architecture",
+        ])
         .assert()
         .success();
 
@@ -297,11 +317,13 @@ fn test_propose_reject() {
     assert!(output.contains("Rejected: 20261230120000-bad-idea"));
 
     // Verify proposal status was updated
-    let updated_proposal: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(&proposal_path).unwrap()
-    ).unwrap();
+    let updated_proposal: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&proposal_path).unwrap()).unwrap();
     assert_eq!(updated_proposal["status"], "rejected");
-    assert_eq!(updated_proposal["rejection_reason"], "Not aligned with architecture");
+    assert_eq!(
+        updated_proposal["rejection_reason"],
+        "Not aligned with architecture"
+    );
 
     // Verify audit trail
     let audit_path = temp.path().join("changes/audit.jsonl");
@@ -354,7 +376,11 @@ fn test_propose_accept_file_lock() {
         "created_at": "2026-12-30T12:00:00Z"
     });
     let proposal_path = proposals_dir.join("20261230120000-test-lock.json");
-    fs::write(&proposal_path, serde_json::to_string_pretty(&proposal).unwrap()).unwrap();
+    fs::write(
+        &proposal_path,
+        serde_json::to_string_pretty(&proposal).unwrap(),
+    )
+    .unwrap();
 
     // Accept should acquire lock and succeed
     assert_cmd::Command::cargo_bin("idl")
@@ -365,9 +391,8 @@ fn test_propose_accept_file_lock() {
         .success();
 
     // Verify graph was updated
-    let updated_graph: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(&graph_path).unwrap()
-    ).unwrap();
+    let updated_graph: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&graph_path).unwrap()).unwrap();
     let nodes = updated_graph["nodes"].as_array().unwrap();
     assert_eq!(nodes.len(), 1);
 }
@@ -405,7 +430,11 @@ fn test_propose_accept_validation_failure() {
         "created_at": "2026-12-30T12:00:00Z"
     });
     let proposal_path = proposals_dir.join("20261230120000-bad-op.json");
-    fs::write(&proposal_path, serde_json::to_string_pretty(&proposal).unwrap()).unwrap();
+    fs::write(
+        &proposal_path,
+        serde_json::to_string_pretty(&proposal).unwrap(),
+    )
+    .unwrap();
 
     assert_cmd::Command::cargo_bin("idl")
         .unwrap()

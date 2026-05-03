@@ -20,7 +20,7 @@ use idl_typeexpr::render_type_expr;
 /// we look up the DTO and append a TypeExpr rendering in brackets for clarity.
 pub fn format_message_with_dtos(message: &str, dtos: &[DtoDefinition]) -> String {
     let mut result = message.to_string();
-    
+
     for dto in dtos {
         if message.contains(&dto.id) {
             let typeexpr = render_type_expr(dto);
@@ -31,7 +31,7 @@ pub fn format_message_with_dtos(message: &str, dtos: &[DtoDefinition]) -> String
             break; // Only augment once per message
         }
     }
-    
+
     result
 }
 
@@ -41,6 +41,7 @@ pub fn format_message_with_dtos(message: &str, dtos: &[DtoDefinition]) -> String
 /// include BOTH the TypeExpr (type shape) and the discriminator property name.
 ///
 /// Example: "union AccountHolder (discriminator: role) expects User|Admin"
+#[allow(dead_code)]
 pub fn format_union_discriminator_message(
     union_name: &str,
     discriminator_property: &str,
@@ -101,7 +102,7 @@ mod tests {
     fn test_format_message_with_object_dto() {
         let dto = make_dto("dto:LoginUser", DtoKind::Object);
         let message = "Type mismatch in field: expected dto:LoginUser";
-        
+
         let formatted = format_message_with_dtos(message, &[dto]);
         assert!(formatted.contains("TypeExpr: LoginUser"));
         assert!(formatted.contains("dto:LoginUser [TypeExpr: LoginUser]"));
@@ -112,7 +113,7 @@ mod tests {
         let mut dto = make_dto("dto:BillArray", DtoKind::ArrayAlias);
         dto.items = Some("dto:Bill".to_string());
         let message = "Invalid type dto:BillArray";
-        
+
         let formatted = format_message_with_dtos(message, &[dto]);
         assert!(formatted.contains("TypeExpr: Bill[]"));
     }
@@ -133,7 +134,7 @@ mod tests {
             },
         ]);
         let message = "Union dto:AccountHolder mismatch";
-        
+
         let formatted = format_message_with_dtos(message, &[dto]);
         assert!(formatted.contains("TypeExpr: User|Admin"));
     }
@@ -142,7 +143,7 @@ mod tests {
     fn test_format_message_without_dto_reference() {
         let dto = make_dto("dto:LoginUser", DtoKind::Object);
         let message = "Generic error message";
-        
+
         let formatted = format_message_with_dtos(message, &[dto]);
         assert_eq!(formatted, "Generic error message");
     }

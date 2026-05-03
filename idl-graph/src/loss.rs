@@ -85,10 +85,7 @@ impl SemanticLossReport {
         let _ = writeln!(s, "| block | lines | reason | excerpt |");
         let _ = writeln!(s, "|-------|-------|--------|---------|");
         for entry in &self.lost_blocks {
-            let excerpt = entry
-                .raw_excerpt
-                .replace('|', "\\|")
-                .replace('\n', " ⏎ ");
+            let excerpt = entry.raw_excerpt.replace('|', "\\|").replace('\n', " ⏎ ");
             let excerpt = if excerpt.len() > 80 {
                 format!("{}…", &excerpt[..80])
             } else {

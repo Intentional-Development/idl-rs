@@ -1,9 +1,9 @@
 pub mod ast;
-pub mod parser;
-pub mod error;
-pub mod semantic;
 pub mod drift;
+pub mod error;
+pub mod parser;
+pub mod semantic;
 
 pub use ast::*;
-pub use parser::*;
 pub use error::*;
+pub use parser::*;

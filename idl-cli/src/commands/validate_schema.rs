@@ -8,8 +8,7 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use serde_json::Value;
 
-const EMBEDDED_SCHEMA: &str =
-    include_str!("../../../../IDL/schemas/semantic-graph.schema.json");
+const EMBEDDED_SCHEMA: &str = include_str!("../../../../IDL/schemas/semantic-graph.schema.json");
 
 #[derive(Serialize)]
 struct SchemaViolation {
@@ -81,7 +80,11 @@ pub fn run(graph_path: PathBuf, schema_override: Option<PathBuf>, json: bool) ->
             for v in &report.violations {
                 println!(
                     "    {} (schema: {}): {}",
-                    if v.pointer.is_empty() { "/" } else { &v.pointer },
+                    if v.pointer.is_empty() {
+                        "/"
+                    } else {
+                        &v.pointer
+                    },
                     v.schema_pointer,
                     v.message
                 );

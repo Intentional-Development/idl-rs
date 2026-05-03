@@ -17,8 +17,8 @@ mod diagnostic_formatter;
 mod graph_build;
 
 use commands::{
-    change, drift, emit, extract, init, interview, parse, perspective, prompts, propose, validate,
-    validate_schema,
+    change, drift, emit, extract, init, interview, parse, perspective, prompts, propose, status,
+    validate, validate_schema,
 };
 
 #[derive(Parser, Debug)]
@@ -42,10 +42,12 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Parse and validate an IDL project (kernel-aware graph + constraints + loss report).
-    #[command(long_about = "Parse the IDL file at `path` (default: intent/project.idl, then project.idl), \n\
+    #[command(
+        long_about = "Parse the IDL file at `path` (default: intent/project.idl, then project.idl), \n\
         lift it into the kernel-aware semantic graph, and run the default 6 constraints.\n\
         Reports semantic-loss coverage (P0.7). Exit code: 0 ok, 1 errors, 2 warnings (non-strict).\n\
-        With --anchors, validates source_anchors against the filesystem under --source.")]
+        With --anchors, validates source_anchors against the filesystem under --source."
+    )]
     Validate {
         /// IDL file (default: intent/project.idl, then project.idl).
         path: Option<PathBuf>,
@@ -151,9 +153,45 @@ enum Commands {
     ///
     /// `idl drift graph <baseline> <current>`  — graph-vs-graph
     /// `idl drift code  <graph> --source <p>`  — graph-vs-code
+    /// `idl drift --gate` — cross-target generated-output gate for CI
     Drift {
+        /// Run the cross-target drift gate in the current workspace.
+        #[arg(long)]
+        gate: bool,
+
+        /// Emit gate output as JSON.
+        #[arg(long, requires = "gate")]
+        json: bool,
+
+        /// Workspace root for gate discovery (default: current directory).
+        #[arg(long, default_value = ".", requires = "gate")]
+        workspace: PathBuf,
+
+        /// Graph path override for gate discovery.
+        #[arg(long, requires = "gate")]
+        graph: Option<PathBuf>,
+
+        /// Generated-output root override for gate comparison.
+        #[arg(long, requires = "gate")]
+        generated: Option<PathBuf>,
+
+        /// Emit target override. May be repeated.
+        #[arg(long = "target", requires = "gate")]
+        targets: Vec<String>,
+
         #[command(subcommand)]
-        action: DriftAction,
+        action: Option<DriftAction>,
+    },
+
+    /// Report workspace health (graph, schema, proposals, drift, conformance).
+    Status {
+        /// Graph path override. Defaults to idl.graph.json discovery.
+        #[arg(long)]
+        graph: Option<PathBuf>,
+
+        /// Emit the report as JSON.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Project a graph through a role-based perspective.
@@ -228,19 +266,13 @@ enum InterviewAction {
         rounds: u32,
     },
     /// Run the next round of an existing session.
-    Continue {
-        session_id: String,
-    },
+    Continue { session_id: String },
     /// Promote the accumulated delta into a proposed change folder.
-    Accept {
-        session_id: String,
-    },
+    Accept { session_id: String },
     /// List all sessions.
     List,
     /// Print the transcript and accumulated graph for a session.
-    Show {
-        session_id: String,
-    },
+    Show { session_id: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -323,9 +355,7 @@ enum ChangeAction {
         id: String,
     },
     /// Accept a proposed change into `project.idl`.
-    Accept {
-        id: String,
-    },
+    Accept { id: String },
     /// Reject a proposed change with a reason.
     Reject {
         id: String,
@@ -333,13 +363,9 @@ enum ChangeAction {
         reason: String,
     },
     /// Show the semantic diff for a change.
-    Diff {
-        id: String,
-    },
+    Diff { id: String },
     /// Validate a change folder (delta well-formed, references resolve).
-    Validate {
-        id: String,
-    },
+    Validate { id: String },
 }
 
 fn main() -> ExitCode {
@@ -366,25 +392,35 @@ fn init_tracing(verbose: bool) {
 
 fn dispatch(cmd: Commands) -> Result<ExitCode> {
     match cmd {
-        Commands::Validate { path, strict, json, anchors, source } => {
+        Commands::Validate {
+            path,
+            strict,
+            json,
+            anchors,
+            source,
+        } => {
             if anchors {
                 let graph = path.ok_or_else(|| {
                     anyhow::anyhow!("--anchors requires a graph JSON path argument")
                 })?;
-                let src = source.ok_or_else(|| {
-                    anyhow::anyhow!("--anchors requires --source <root>")
-                })?;
+                let src =
+                    source.ok_or_else(|| anyhow::anyhow!("--anchors requires --source <root>"))?;
                 commands::validate_anchors::run(graph, src, json)
             } else {
                 validate::run(path, strict, json)
             }
         }
-        Commands::ValidateSchema { graph, schema, json } => {
-            validate_schema::run(graph, schema, json)
-        }
-        Commands::Init { greenfield, brownfield, source, dir } => {
-            init::run(dir, greenfield, brownfield, source)
-        }
+        Commands::ValidateSchema {
+            graph,
+            schema,
+            json,
+        } => validate_schema::run(graph, schema, json),
+        Commands::Init {
+            greenfield,
+            brownfield,
+            source,
+            dir,
+        } => init::run(dir, greenfield, brownfield, source),
         Commands::Change { action } => match action {
             ChangeAction::New { slug } => change::new(slug),
             ChangeAction::List => change::list(),
@@ -396,38 +432,72 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             ChangeAction::Diff { id } => change::stub("diff", &id),
             ChangeAction::Validate { id } => change::stub("validate", &id),
         },
-        Commands::Extract { source, output, language, rewrite_anchors, in_place } => {
-            extract::run(source, output, language, rewrite_anchors, in_place)
-        }
+        Commands::Extract {
+            source,
+            output,
+            language,
+            rewrite_anchors,
+            in_place,
+        } => extract::run(source, output, language, rewrite_anchors, in_place),
         Commands::Emit { target, graph, out } => emit::run(target, graph, out),
-        Commands::Drift { action } => match action {
-            DriftAction::Graph { baseline, current, json, markdown } => {
-                let fmt = if json {
-                    drift::OutputFormat::Json
-                } else if markdown {
-                    drift::OutputFormat::Markdown
-                } else {
-                    drift::OutputFormat::Human
-                };
-                drift::run_graph(baseline, current, fmt)
+        Commands::Drift {
+            gate,
+            json,
+            workspace,
+            graph,
+            generated,
+            targets,
+            action,
+        } => {
+            if gate {
+                return drift::run_gate(workspace, graph, generated, targets, json);
             }
-            DriftAction::Code { graph, source, json, markdown } => {
-                let fmt = if json {
-                    drift::OutputFormat::Json
-                } else if markdown {
-                    drift::OutputFormat::Markdown
-                } else {
-                    drift::OutputFormat::Human
-                };
-                drift::run_code(graph, source, fmt)
+            match action {
+                Some(DriftAction::Graph {
+                    baseline,
+                    current,
+                    json,
+                    markdown,
+                }) => {
+                    let fmt = if json {
+                        drift::OutputFormat::Json
+                    } else if markdown {
+                        drift::OutputFormat::Markdown
+                    } else {
+                        drift::OutputFormat::Human
+                    };
+                    drift::run_graph(baseline, current, fmt)
+                }
+                Some(DriftAction::Code {
+                    graph,
+                    source,
+                    json,
+                    markdown,
+                }) => {
+                    let fmt = if json {
+                        drift::OutputFormat::Json
+                    } else if markdown {
+                        drift::OutputFormat::Markdown
+                    } else {
+                        drift::OutputFormat::Human
+                    };
+                    drift::run_code(graph, source, fmt)
+                }
+                None => Err(anyhow::anyhow!("pass a drift subcommand or --gate")),
             }
-        },
-        Commands::Perspective { role, graph, config, json } => {
-            perspective::run(role, graph, config, json)
         }
-        Commands::Prompts { graph, target, out_dir } => {
-            prompts::run(graph, target, out_dir)
-        }
+        Commands::Status { graph, json } => status::run(graph, json),
+        Commands::Perspective {
+            role,
+            graph,
+            config,
+            json,
+        } => perspective::run(role, graph, config, json),
+        Commands::Prompts {
+            graph,
+            target,
+            out_dir,
+        } => prompts::run(graph, target, out_dir),
         Commands::Parse { path, json } => parse::run(path, json),
         Commands::Interview { action } => match action {
             InterviewAction::New { topic, rounds } => interview::run_new(topic, rounds),
@@ -437,9 +507,11 @@ fn dispatch(cmd: Commands) -> Result<ExitCode> {
             InterviewAction::Show { session_id } => interview::run_show(session_id),
         },
         Commands::Propose { action } => match action {
-            ProposeAction::Create { title, target_graph, ops_file } => {
-                propose::create(title, target_graph, ops_file)
-            }
+            ProposeAction::Create {
+                title,
+                target_graph,
+                ops_file,
+            } => propose::create(title, target_graph, ops_file),
             ProposeAction::List { status } => propose::list(status),
             ProposeAction::Accept { id } => propose::accept(id),
             ProposeAction::Reject { id, reason } => propose::reject(id, reason),

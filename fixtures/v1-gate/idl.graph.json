@@ -1,0 +1,33 @@
+{
+  "version": "0.1.9",
+  "metadata": {
+    "name": "v1 gate fixture",
+    "emit_targets": ["typescript", "python", "rust"],
+    "conformance": { "corpora": ["v1-gate"] }
+  },
+  "nodes": [
+    {
+      "id": "entity:user",
+      "kind": "entity",
+      "state": "accepted",
+      "props": {
+        "name": "User",
+        "attributes": [
+          { "name": "id", "type": "string" },
+          { "name": "email", "type": "string" }
+        ]
+      }
+    },
+    {
+      "id": "operation:create-user",
+      "kind": "operation",
+      "state": "accepted",
+      "props": {
+        "name": "Create User",
+        "inputs": [{ "name": "email", "type": "string" }],
+        "outputs": [{ "name": "user", "type": "User" }]
+      }
+    }
+  ],
+  "edges": []
+}

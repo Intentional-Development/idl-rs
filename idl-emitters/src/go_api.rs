@@ -1,6 +1,6 @@
-use crate::traits::{Emitter, EmitResult, GeneratedFile};
-use idl_core::IdlDocument;
+use crate::traits::{EmitResult, Emitter, GeneratedFile};
 use anyhow::Result;
+use idl_core::IdlDocument;
 
 pub struct GoApiEmitter;
 

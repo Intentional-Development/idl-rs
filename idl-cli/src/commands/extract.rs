@@ -25,10 +25,9 @@ pub fn run(
         let new = prefixes
             .get(1)
             .ok_or_else(|| anyhow!("--rewrite-anchors requires <old> <new>"))?;
-        let graph_path = output
-            .clone()
-            .or_else(|| source.clone())
-            .ok_or_else(|| anyhow!("pass --output <graph.json> (or --source) for rewrite-anchors"))?;
+        let graph_path = output.clone().or_else(|| source.clone()).ok_or_else(|| {
+            anyhow!("pass --output <graph.json> (or --source) for rewrite-anchors")
+        })?;
         return rewrite_anchors_in_file(&graph_path, old, new, in_place);
     }
 
@@ -63,8 +62,7 @@ pub fn rewrite_anchors_in_file(
     } else {
         sibling_with_suffix(graph_path, "rewritten.json")
     };
-    std::fs::write(&target, pretty)
-        .with_context(|| format!("write {}", target.display()))?;
+    std::fs::write(&target, pretty).with_context(|| format!("write {}", target.display()))?;
 
     println!(
         "rewrote {rewritten} anchors: `{old_prefix}` -> `{new_prefix}`\n  input:  {}\n  output: {}",
@@ -102,7 +100,9 @@ pub fn rewrite_anchors_in_value(
             continue;
         };
         for anchor in anchors {
-            let Some(uri) = anchor.get_mut("uri").and_then(|u| u.as_str().map(String::from))
+            let Some(uri) = anchor
+                .get_mut("uri")
+                .and_then(|u| u.as_str().map(String::from))
             else {
                 continue;
             };
@@ -162,4 +162,3 @@ mod tests {
         assert_eq!(uris[2], "repo://other/path.ts");
     }
 }
-

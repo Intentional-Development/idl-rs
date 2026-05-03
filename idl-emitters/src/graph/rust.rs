@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use anyhow::Result;
 use idl_graph::GraphDoc;
 
-use super::{node_name, pascal_case, safe_ident, snake_case, EmitReport, EmittedFile, GraphEmitter};
+use super::{
+    node_name, pascal_case, safe_ident, snake_case, EmitReport, EmittedFile, GraphEmitter,
+};
 
 pub struct RustEmitter;
 
@@ -36,18 +38,35 @@ impl GraphEmitter for RustEmitter {
             if let Some(attrs) = node.props.get("attributes").and_then(|v| v.as_array()) {
                 for attr in attrs {
                     let aname = attr.get("name").and_then(|v| v.as_str()).unwrap_or("field");
-                    let atype = attr.get("type").and_then(|v| v.as_str()).unwrap_or("String");
-                    let nullable = attr.get("nullable").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let atype = attr
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("String");
+                    let nullable = attr
+                        .get("nullable")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
                     let rust_ty = map_type_to_rust(atype);
-                    let ty = if nullable { format!("Option<{rust_ty}>") } else { rust_ty };
-                    s.push_str(&format!("    pub {}: {},\n", safe_ident(&snake_case(aname)), ty));
+                    let ty = if nullable {
+                        format!("Option<{rust_ty}>")
+                    } else {
+                        rust_ty
+                    };
+                    s.push_str(&format!(
+                        "    pub {}: {},\n",
+                        safe_ident(&snake_case(aname)),
+                        ty
+                    ));
                 }
             }
             s.push_str("}\n\n");
             entity_count += 1;
         }
         if entity_count > 0 {
-            report.files.push(EmittedFile { path: PathBuf::from("src/entities.rs"), content: s });
+            report.files.push(EmittedFile {
+                path: PathBuf::from("src/entities.rs"),
+                content: s,
+            });
             report.nodes_emitted += entity_count;
         }
 
@@ -65,13 +84,18 @@ impl GraphEmitter for RustEmitter {
             let outputs = outputs_signature_rust(node);
             s.push_str(&format!(
                 "    fn {}(&self{}) -> Result<{}>;\n\n",
-                safe_ident(&name), inputs, outputs
+                safe_ident(&name),
+                inputs,
+                outputs
             ));
             op_count += 1;
         }
         s.push_str("}\n");
         if op_count > 0 {
-            report.files.push(EmittedFile { path: PathBuf::from("src/operations.rs"), content: s });
+            report.files.push(EmittedFile {
+                path: PathBuf::from("src/operations.rs"),
+                content: s,
+            });
             report.nodes_emitted += op_count;
         }
 
@@ -86,19 +110,38 @@ impl GraphEmitter for RustEmitter {
             s.push_str(&format!("    // GENERATED_FROM {}\n", node.id));
             if let Some(eps) = node.props.get("endpoints").and_then(|v| v.as_array()) {
                 for ep in eps {
-                    let method = ep.get("method").and_then(|v| v.as_str()).unwrap_or("GET").to_lowercase();
+                    let method = ep
+                        .get("method")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("GET")
+                        .to_lowercase();
                     let path = ep.get("path").and_then(|v| v.as_str()).unwrap_or("/");
-                    let opid = ep.get("operation_id").and_then(|v| v.as_str()).unwrap_or("");
-                    let handler = safe_ident(&snake_case(opid.rsplit_once(':').map(|(_, s)| s).unwrap_or(opid)));
-                    let handler = if handler.is_empty() { "todo".to_string() } else { handler };
-                    s.push_str(&format!("        .route({:?}, {}({}_handler))\n", path, method, handler));
+                    let opid = ep
+                        .get("operation_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let handler = safe_ident(&snake_case(
+                        opid.rsplit_once(':').map(|(_, s)| s).unwrap_or(opid),
+                    ));
+                    let handler = if handler.is_empty() {
+                        "todo".to_string()
+                    } else {
+                        handler
+                    };
+                    s.push_str(&format!(
+                        "        .route({:?}, {}({}_handler))\n",
+                        path, method, handler
+                    ));
                 }
             }
             api_emitted += 1;
         }
         s.push_str("}\n");
         if api_emitted > 0 {
-            report.files.push(EmittedFile { path: PathBuf::from("src/routes.rs"), content: s });
+            report.files.push(EmittedFile {
+                path: PathBuf::from("src/routes.rs"),
+                content: s,
+            });
             report.nodes_emitted += api_emitted;
         }
 
@@ -108,8 +151,12 @@ impl GraphEmitter for RustEmitter {
         s.push_str("// Target: rust · Section: state machines\n\n");
         let mut sm_count = 0;
         for node in graph.nodes_of_kind("state_machine") {
-            let raw_name = node.props.get("entity_or_aggregate").and_then(|v| v.as_str())
-                .map(|s| s.to_string()).unwrap_or_else(|| node_name(node));
+            let raw_name = node
+                .props
+                .get("entity_or_aggregate")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| node_name(node));
             let name = pascal_case(&raw_name);
             s.push_str(&format!("// GENERATED_FROM {}\n", node.id));
             s.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
@@ -124,7 +171,8 @@ impl GraphEmitter for RustEmitter {
             s.push_str("}\n\n");
             s.push_str(&format!(
                 "pub fn {0}_transition(state: {1}State, trigger: &str) -> Option<{1}State> {{\n",
-                snake_case(&raw_name), name
+                snake_case(&raw_name),
+                name
             ));
             s.push_str("    match (state, trigger) {\n");
             if let Some(trs) = node.props.get("transitions").and_then(|v| v.as_array()) {
@@ -134,7 +182,10 @@ impl GraphEmitter for RustEmitter {
                     let trigger = t.get("trigger").and_then(|v| v.as_str()).unwrap_or("?");
                     s.push_str(&format!(
                         "        ({0}State::{1}, {2:?}) => Some({0}State::{3}),\n",
-                        name, pascal_case(from), trigger, pascal_case(to)
+                        name,
+                        pascal_case(from),
+                        trigger,
+                        pascal_case(to)
                     ));
                 }
             }
@@ -142,7 +193,10 @@ impl GraphEmitter for RustEmitter {
             sm_count += 1;
         }
         if sm_count > 0 {
-            report.files.push(EmittedFile { path: PathBuf::from("src/state_machines.rs"), content: s });
+            report.files.push(EmittedFile {
+                path: PathBuf::from("src/state_machines.rs"),
+                content: s,
+            });
             report.nodes_emitted += sm_count;
         }
 
@@ -150,11 +204,22 @@ impl GraphEmitter for RustEmitter {
         let mut root = String::new();
         root.push_str("// AUTO-GENERATED by idl-emitters · do not edit\n");
         root.push_str("// Crate root for IDL-generated scaffolding.\n\n");
-        if entity_count > 0 { root.push_str("pub mod entities;\n"); }
-        if op_count > 0 { root.push_str("pub mod operations;\n"); }
-        if api_emitted > 0 { root.push_str("pub mod routes;\n"); }
-        if sm_count > 0 { root.push_str("pub mod state_machines;\n"); }
-        report.files.push(EmittedFile { path: PathBuf::from("src/lib.rs"), content: root });
+        if entity_count > 0 {
+            root.push_str("pub mod entities;\n");
+        }
+        if op_count > 0 {
+            root.push_str("pub mod operations;\n");
+        }
+        if api_emitted > 0 {
+            root.push_str("pub mod routes;\n");
+        }
+        if sm_count > 0 {
+            root.push_str("pub mod state_machines;\n");
+        }
+        report.files.push(EmittedFile {
+            path: PathBuf::from("src/lib.rs"),
+            content: root,
+        });
 
         Ok(report)
     }
@@ -180,9 +245,16 @@ fn inputs_signature(node: &idl_graph::NodeDoc) -> String {
         for inp in inputs {
             let n = inp.get("name").and_then(|v| v.as_str()).unwrap_or("arg");
             let t = inp.get("type").and_then(|v| v.as_str()).unwrap_or("String");
-            let nullable = inp.get("nullable").and_then(|v| v.as_bool()).unwrap_or(false);
+            let nullable = inp
+                .get("nullable")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let rty = map_type_to_rust(t);
-            let ty = if nullable { format!("Option<{rty}>") } else { rty };
+            let ty = if nullable {
+                format!("Option<{rty}>")
+            } else {
+                rty
+            };
             s.push_str(&format!(", {}: {}", safe_ident(&snake_case(n)), ty));
         }
     }
@@ -195,7 +267,8 @@ fn outputs_signature_rust(node: &idl_graph::NodeDoc) -> String {
             let t = outs[0].get("type").and_then(|v| v.as_str()).unwrap_or("()");
             return map_type_to_rust(t);
         } else if outs.len() > 1 {
-            let parts: Vec<String> = outs.iter()
+            let parts: Vec<String> = outs
+                .iter()
                 .map(|o| map_type_to_rust(o.get("type").and_then(|v| v.as_str()).unwrap_or("()")))
                 .collect();
             return format!("({})", parts.join(", "));

@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 #[test]
 fn test_nested_request_body_discriminator() {
     // Simulate a path operation with discriminator in requestBody
-    let path_operation = json!({
+    let _path_operation = json!({
         "post": {
             "requestBody": {
                 "content": {
@@ -18,7 +18,7 @@ fn test_nested_request_body_discriminator() {
             }
         }
     });
-    
+
     // The referenced schema has a discriminator
     let webhook_schema = json!({
         "type": "object",
@@ -30,13 +30,16 @@ fn test_nested_request_body_discriminator() {
             }
         }
     });
-    
+
     // This discriminator should be extracted even though it's nested in requestBody
     assert!(webhook_schema.get("discriminator").is_some());
-    
+
     // Verify the discriminator structure
     let disc = webhook_schema.get("discriminator").unwrap();
-    assert_eq!(disc.get("propertyName").and_then(Value::as_str), Some("action"));
+    assert_eq!(
+        disc.get("propertyName").and_then(Value::as_str),
+        Some("action")
+    );
     assert!(disc.get("mapping").is_some());
 }
 
@@ -44,7 +47,7 @@ fn test_nested_request_body_discriminator() {
 #[test]
 fn test_nested_response_discriminator() {
     // Simulate a path operation with discriminator in response
-    let path_operation = json!({
+    let _path_operation = json!({
         "get": {
             "responses": {
                 "200": {
@@ -59,7 +62,7 @@ fn test_nested_response_discriminator() {
             }
         }
     });
-    
+
     // The referenced schema has oneOf (implicit discriminator)
     let event_schema = json!({
         "type": "object",
@@ -69,7 +72,7 @@ fn test_nested_response_discriminator() {
             { "$ref": "#/components/schemas/IssueEvent" }
         ]
     });
-    
+
     // This oneOf should be detected as a union even though nested in response
     assert!(event_schema.get("oneOf").is_some());
     let one_of = event_schema.get("oneOf").and_then(Value::as_array).unwrap();
@@ -87,25 +90,28 @@ fn test_nested_propertyname_only_discriminator() {
         },
         "oneOf": [
             {
-                "properties": { 
+                "properties": {
                     "status": { "enum": ["completed"] },
                     "conclusion": { "type": "string" }
                 },
                 "required": ["status", "conclusion"]
             },
             {
-                "properties": { 
+                "properties": {
                     "status": { "enum": ["queued", "in_progress"] }
                 },
                 "required": ["status"]
             }
         ]
     });
-    
+
     // Verify propertyName-only discriminator structure
     let disc = check_runs_schema.get("discriminator").unwrap();
-    assert_eq!(disc.get("propertyName").and_then(Value::as_str), Some("status"));
-    
+    assert_eq!(
+        disc.get("propertyName").and_then(Value::as_str),
+        Some("status")
+    );
+
     // Should NOT have mapping field when source has none
     assert!(disc.get("mapping").is_none());
 }
@@ -120,12 +126,15 @@ fn test_inline_oneof_in_nested_path() {
             { "$ref": "#/components/schemas/ErrorResponse" }
         ]
     });
-    
+
     // Inline oneOf should be detected
     assert!(response_schema.get("oneOf").is_some());
-    let variants = response_schema.get("oneOf").and_then(Value::as_array).unwrap();
+    let variants = response_schema
+        .get("oneOf")
+        .and_then(Value::as_array)
+        .unwrap();
     assert_eq!(variants.len(), 2);
-    
+
     // Both variants should have $ref
     for variant in variants {
         assert!(variant.get("$ref").is_some());
@@ -153,14 +162,17 @@ fn test_nested_allof_discriminator() {
         },
         "required": ["role"]
     });
-    
+
     // Verify discriminator with mapping but no oneOf
     assert!(message_schema.get("discriminator").is_some());
     assert!(message_schema.get("oneOf").is_none());
-    
+
     let disc = message_schema.get("discriminator").unwrap();
-    assert_eq!(disc.get("propertyName").and_then(Value::as_str), Some("role"));
-    
+    assert_eq!(
+        disc.get("propertyName").and_then(Value::as_str),
+        Some("role")
+    );
+
     let mapping = disc.get("mapping").and_then(Value::as_object).unwrap();
     assert_eq!(mapping.len(), 3);
     assert!(mapping.contains_key("system"));

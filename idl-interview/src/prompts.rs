@@ -31,7 +31,10 @@ mod tests {
     fn all_five_prompts_are_embedded() {
         for n in 1..=5 {
             let p = round_prompt(n).unwrap();
-            assert!(p.contains("idl interview"), "round {n} prompt missing header");
+            assert!(
+                p.contains("idl interview"),
+                "round {n} prompt missing header"
+            );
         }
         assert!(round_prompt(6).is_none());
     }

@@ -5,9 +5,7 @@ use idl_graph::extensions_dto::{DtoDefinition, DtoExtra, DtoKind, DtoVariant};
 
 pub fn render_type_expr(dto: &DtoDefinition) -> String {
     let base = match dto.kind {
-        DtoKind::Object | DtoKind::Enum => {
-            extract_name(&dto.id)
-        }
+        DtoKind::Object | DtoKind::Enum => extract_name(&dto.id),
         DtoKind::Map => {
             let key = dto.key_type.as_deref().unwrap_or("string");
             let value = dto.value_type.as_deref().unwrap_or("string");
@@ -33,10 +31,7 @@ pub fn render_type_expr(dto: &DtoDefinition) -> String {
         }
         DtoKind::Union => {
             if let Some(variants) = &dto.variants {
-                let variant_exprs: Vec<String> = variants
-                    .iter()
-                    .map(render_variant)
-                    .collect();
+                let variant_exprs: Vec<String> = variants.iter().map(render_variant).collect();
                 variant_exprs.join("|")
             } else {
                 "()".to_string()

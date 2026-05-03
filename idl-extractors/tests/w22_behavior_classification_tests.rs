@@ -13,11 +13,12 @@ fn test_entity_classification() {
         },
         "required": ["id", "name"]
     });
-    
+
     // Entity should have:
     // - id field present
     // - Used in PUT/PATCH/DELETE operations (simulated)
-    assert!(schema.get("properties")
+    assert!(schema
+        .get("properties")
         .and_then(|p| p.as_object())
         .and_then(|p| p.get("id"))
         .is_some());
@@ -27,7 +28,7 @@ fn test_entity_classification() {
 #[test]
 fn test_command_classification() {
     // Command patterns: CreateUser, UpdateAccount, DeleteTransaction
-    let create_user = json!({
+    let _create_user = json!({
         "type": "object",
         "properties": {
             "name": { "type": "string" },
@@ -36,10 +37,15 @@ fn test_command_classification() {
         },
         "required": ["name", "email"]
     });
-    
+
     // Schema name starts with verb (Create, Update, Delete, etc.)
-    let command_names = vec!["CreateUser", "UpdateAccount", "DeleteTransaction", "StoreRequest"];
-    
+    let command_names = vec![
+        "CreateUser",
+        "UpdateAccount",
+        "DeleteTransaction",
+        "StoreRequest",
+    ];
+
     for name in command_names {
         assert!(
             name.starts_with("Create")
@@ -56,7 +62,7 @@ fn test_command_classification() {
 #[test]
 fn test_event_classification() {
     // Event patterns: UserCreated, AccountUpdated, TransactionDeleted
-    let event_schema = json!({
+    let _event_schema = json!({
         "type": "object",
         "properties": {
             "event_id": { "type": "string" },
@@ -65,16 +71,16 @@ fn test_event_classification() {
         },
         "required": ["event_id", "timestamp"]
     });
-    
+
     // Event names end with past tense or contain "event"
     let event_names = vec![
         "UserCreated",
         "AccountUpdated",
         "TransactionDeleted",
         "WebhookEvent",
-        "PushNotification"
+        "PushNotification",
     ];
-    
+
     for name in event_names {
         assert!(
             name.ends_with("ed")
@@ -101,18 +107,21 @@ fn test_value_object_classification() {
         },
         "required": ["street", "city", "country"]
     });
-    
+
     // Value object should:
     // - NOT have id field
     // - Have multiple properties (composite)
     // - Not used in mutation operations (immutable)
-    let props = address_schema.get("properties").and_then(|p| p.as_object()).unwrap();
+    let props = address_schema
+        .get("properties")
+        .and_then(|p| p.as_object())
+        .unwrap();
     assert!(!props.contains_key("id"));
     assert!(props.len() >= 2); // Composite structure
-    
+
     // Value object name patterns
     let value_object_names = vec!["Address", "Money", "DateRange", "Period", "AmountRange"];
-    
+
     for name in value_object_names {
         assert!(
             name.contains("Address")
@@ -147,15 +156,18 @@ fn test_query_result_classification() {
             }
         }
     });
-    
+
     // Query result patterns:
     // - Has "data" array field (pagination wrapper)
     // - Or name contains "List", "Array", "Collection"
-    let props = paginated_schema.get("properties").and_then(|p| p.as_object()).unwrap();
+    let props = paginated_schema
+        .get("properties")
+        .and_then(|p| p.as_object())
+        .unwrap();
     assert!(props.contains_key("data"));
-    
+
     let query_result_names = vec!["AccountList", "TransactionArray", "UserCollection"];
-    
+
     for name in query_result_names {
         assert!(
             name.contains("List") || name.contains("Array") || name.contains("Collection"),
@@ -169,18 +181,18 @@ fn test_query_result_classification() {
 #[test]
 fn test_dto_only_classification() {
     // Simple DTO without special patterns
-    let simple_dto = json!({
+    let _simple_dto = json!({
         "type": "object",
         "properties": {
             "name": { "type": "string" },
             "value": { "type": "string" }
         }
     });
-    
+
     // DTOs that don't match other patterns default to "dto-only"
     // Examples: Metadata, Configuration, Settings, etc.
     let dto_only_names = vec!["Metadata", "Configuration", "Settings", "Options"];
-    
+
     // These should not match entity, command, event, value-object, or query-result patterns
     for name in dto_only_names {
         assert!(
@@ -201,7 +213,7 @@ fn test_dto_only_classification() {
 fn test_mixed_heuristics_priority() {
     // CreateUser has both command pattern (verb) and could be entity-like
     // Command should take precedence if used in POST operation
-    
+
     // UpdateAccount with id field - still a command (verb takes precedence)
     let update_with_id = json!({
         "type": "object",
@@ -210,9 +222,10 @@ fn test_mixed_heuristics_priority() {
             "new_name": { "type": "string" }
         }
     });
-    
+
     // Name starts with "Update" (command), even with id field
-    assert!(update_with_id.get("properties")
+    assert!(update_with_id
+        .get("properties")
         .and_then(|p| p.as_object())
         .and_then(|p| p.get("id"))
         .is_some());
@@ -224,7 +237,7 @@ fn test_paginated_kind_is_query_result() {
     // Any DTO with kind="paginated" should be classified as query-result
     let kind = "paginated";
     assert_eq!(kind, "paginated");
-    
+
     // Paginated schemas represent list responses with pagination metadata
     // They should ALWAYS be classified as query-result regardless of name
 }

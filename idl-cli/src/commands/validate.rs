@@ -25,8 +25,8 @@ pub fn run(path: Option<PathBuf>, strict: bool, json: bool) -> Result<ExitCode> 
     let path = resolve_path(path)?;
     let text = std::fs::read_to_string(&path)
         .with_context(|| format!("read IDL file {}", path.display()))?;
-    let doc = idl_core::parse_idl(&text)
-        .with_context(|| format!("parse IDL file {}", path.display()))?;
+    let doc =
+        idl_core::parse_idl(&text).with_context(|| format!("parse IDL file {}", path.display()))?;
 
     let lifted = lift_document(&doc, &path.display().to_string());
     let constraints = default_constraints();

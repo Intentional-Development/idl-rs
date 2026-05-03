@@ -29,10 +29,11 @@ use serde_json::Value;
 use crate::doc::{ConfidenceDoc, GraphDoc, SourceAnchorDoc};
 
 /// DTO kind discriminator. Determines the DTO shape and which fields are valid.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DtoKind {
     /// Entity-projection DTO. Projects from a `base` entity via pick/omit/extras.
+    #[default]
     Object,
     /// Enum-only type. Declares a closed set of string literal values.
     Enum,
@@ -46,12 +47,6 @@ pub enum DtoKind {
     Union,
     /// Paginated type (Wave 18). API list response with envelope wrapper (data array + pagination metadata).
     Paginated,
-}
-
-impl Default for DtoKind {
-    fn default() -> Self {
-        DtoKind::Object
-    }
 }
 
 /// Parsed DTO definition. Fields mirror the JSON shape under
@@ -177,9 +172,15 @@ impl DtoViolation {
 /// Parse the `extensions.dto.definitions[]` array out of a [`GraphDoc`].
 /// Returns an empty vec if the namespace is absent.
 pub fn parse_dtos(graph: &GraphDoc) -> Result<Vec<DtoDefinition>, String> {
-    let Some(ext) = &graph.extensions else { return Ok(Vec::new()); };
-    let Some(dto_ns) = ext.get("dto") else { return Ok(Vec::new()); };
-    let Some(defs) = dto_ns.get("definitions") else { return Ok(Vec::new()); };
+    let Some(ext) = &graph.extensions else {
+        return Ok(Vec::new());
+    };
+    let Some(dto_ns) = ext.get("dto") else {
+        return Ok(Vec::new());
+    };
+    let Some(defs) = dto_ns.get("definitions") else {
+        return Ok(Vec::new());
+    };
     let Some(arr) = defs.as_array() else {
         return Err("extensions.dto.definitions must be an array".into());
     };
@@ -293,7 +294,9 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
 
                 // wraps must resolve to a known DTO.
                 if let Some(wraps_ref) = &dto.wraps {
-                    if !seen_ids.contains(wraps_ref.as_str()) && !dtos.iter().any(|d| d.id == *wraps_ref) {
+                    if !seen_ids.contains(wraps_ref.as_str())
+                        && !dtos.iter().any(|d| d.id == *wraps_ref)
+                    {
                         out.push(DtoViolation::new(
                             "dto-wrapper-wraps-resolves",
                             dto,
@@ -370,7 +373,8 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
                     out.push(DtoViolation::new(
                         "dto-enum-no-projection",
                         dto,
-                        "kind: \"enum\" forbids base, pick, omit, extras, wrapper, wraps".to_string(),
+                        "kind: \"enum\" forbids base, pick, omit, extras, wrapper, wraps"
+                            .to_string(),
                     ));
                 }
             }
@@ -394,18 +398,24 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
                     out.push(DtoViolation::new(
                         "dto-map-no-projection",
                         dto,
-                        "kind: \"map\" forbids base, pick, omit, extras, wrapper, wraps".to_string(),
+                        "kind: \"map\" forbids base, pick, omit, extras, wrapper, wraps"
+                            .to_string(),
                     ));
                 }
                 // value_type must resolve to known DTO id or valid primitive.
                 if let Some(vt) = &dto.value_type {
-                    let is_primitive = matches!(vt.as_str(), "string" | "integer" | "number" | "boolean");
-                    let is_dto = vt.starts_with("dto:") && (seen_ids.contains(vt.as_str()) || dtos.iter().any(|d| d.id == *vt));
+                    let is_primitive =
+                        matches!(vt.as_str(), "string" | "integer" | "number" | "boolean");
+                    let is_dto = vt.starts_with("dto:")
+                        && (seen_ids.contains(vt.as_str()) || dtos.iter().any(|d| d.id == *vt));
                     if !is_primitive && !is_dto {
                         out.push(DtoViolation::new(
                             "dto-map-value-type-resolves",
                             dto,
-                            format!("value_type {:?} must be a valid primitive or known DTO id", vt),
+                            format!(
+                                "value_type {:?} must be a valid primitive or known DTO id",
+                                vt
+                            ),
                         ));
                     }
                 }
@@ -455,13 +465,21 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
                 }
                 // items must resolve to known DTO id or valid primitive.
                 if let Some(items_ref) = &dto.items {
-                    let is_primitive = matches!(items_ref.as_str(), "string" | "integer" | "number" | "boolean");
-                    let is_dto = items_ref.starts_with("dto:") && (seen_ids.contains(items_ref.as_str()) || dtos.iter().any(|d| d.id == *items_ref));
+                    let is_primitive = matches!(
+                        items_ref.as_str(),
+                        "string" | "integer" | "number" | "boolean"
+                    );
+                    let is_dto = items_ref.starts_with("dto:")
+                        && (seen_ids.contains(items_ref.as_str())
+                            || dtos.iter().any(|d| d.id == *items_ref));
                     if !is_primitive && !is_dto {
                         out.push(DtoViolation::new(
                             "dto-array-alias-items-resolves",
                             dto,
-                            format!("items {:?} must be a valid primitive or known DTO id", items_ref),
+                            format!(
+                                "items {:?} must be a valid primitive or known DTO id",
+                                items_ref
+                            ),
                         ));
                     }
                 }
@@ -496,11 +514,16 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
                 if let Some(variants) = &dto.variants {
                     for (i, var) in variants.iter().enumerate() {
                         if let Some(ref_) = &var.ref_ {
-                            if !seen_ids.contains(ref_.as_str()) && !dtos.iter().any(|d| d.id == *ref_) {
+                            if !seen_ids.contains(ref_.as_str())
+                                && !dtos.iter().any(|d| d.id == *ref_)
+                            {
                                 out.push(DtoViolation::new(
                                     "dto-union-variant-resolves",
                                     dto,
-                                    format!("variants[{}].ref {:?} does not resolve to a known DTO id", i, ref_),
+                                    format!(
+                                        "variants[{}].ref {:?} does not resolve to a known DTO id",
+                                        i, ref_
+                                    ),
                                 ));
                             }
                         }
@@ -537,13 +560,21 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
                 }
                 // items must resolve to known DTO id or valid primitive.
                 if let Some(items_ref) = &dto.items {
-                    let is_primitive = matches!(items_ref.as_str(), "string" | "integer" | "number" | "boolean");
-                    let is_dto = items_ref.starts_with("dto:") && (seen_ids.contains(items_ref.as_str()) || dtos.iter().any(|d| d.id == *items_ref));
+                    let is_primitive = matches!(
+                        items_ref.as_str(),
+                        "string" | "integer" | "number" | "boolean"
+                    );
+                    let is_dto = items_ref.starts_with("dto:")
+                        && (seen_ids.contains(items_ref.as_str())
+                            || dtos.iter().any(|d| d.id == *items_ref));
                     if !is_primitive && !is_dto {
                         out.push(DtoViolation::new(
                             "dto-paginated-items-resolves",
                             dto,
-                            format!("items {:?} must be a valid primitive or known DTO id", items_ref),
+                            format!(
+                                "items {:?} must be a valid primitive or known DTO id",
+                                items_ref
+                            ),
                         ));
                     }
                 }
@@ -560,9 +591,7 @@ pub fn validate_dtos(graph: &GraphDoc) -> Vec<DtoViolation> {
         }
 
         // 6. accepted-state needs anchors or decision_refs.
-        if dto.state == "accepted"
-            && dto.source_anchors.is_empty()
-            && dto.decision_refs.is_empty()
+        if dto.state == "accepted" && dto.source_anchors.is_empty() && dto.decision_refs.is_empty()
         {
             out.push(DtoViolation::new(
                 "dto-accepted-provenance",
@@ -607,10 +636,18 @@ pub fn compute_projected_fields(
     base_attrs: &BTreeSet<String>,
 ) -> BTreeSet<String> {
     let mut out: BTreeSet<String> = match (&dto.pick, &dto.omit) {
-        (Some(pick), _) => pick.iter().filter(|n| base_attrs.contains(*n)).cloned().collect(),
+        (Some(pick), _) => pick
+            .iter()
+            .filter(|n| base_attrs.contains(*n))
+            .cloned()
+            .collect(),
         (None, Some(omit)) => {
             let omit_set: BTreeSet<&String> = omit.iter().collect();
-            base_attrs.iter().filter(|n| !omit_set.contains(n)).cloned().collect()
+            base_attrs
+                .iter()
+                .filter(|n| !omit_set.contains(n))
+                .cloned()
+                .collect()
         }
         (None, None) => base_attrs.iter().cloned().collect(),
     };
@@ -622,10 +659,7 @@ pub fn compute_projected_fields(
 
 /// Legacy alias for backward compatibility.
 #[deprecated(since = "0.1.5", note = "Use `compute_projected_fields` instead")]
-pub fn project_field_set(
-    dto: &DtoDefinition,
-    base_attrs: &BTreeSet<String>,
-) -> BTreeSet<String> {
+pub fn project_field_set(dto: &DtoDefinition, base_attrs: &BTreeSet<String>) -> BTreeSet<String> {
     compute_projected_fields(dto, base_attrs)
 }
 
@@ -640,7 +674,9 @@ pub fn projected_fields_ordered(
     let pick_set: Option<BTreeSet<&String>> = dto.pick.as_ref().map(|v| v.iter().collect());
     let omit_set: Option<BTreeSet<&String>> = dto.omit.as_ref().map(|v| v.iter().collect());
     for a in base_attrs_ordered {
-        let Some(name) = a.get("name").and_then(|v| v.as_str()) else { continue };
+        let Some(name) = a.get("name").and_then(|v| v.as_str()) else {
+            continue;
+        };
         if let Some(p) = &pick_set {
             if !p.contains(&name.to_string()) {
                 continue;
@@ -651,7 +687,11 @@ pub fn projected_fields_ordered(
                 continue;
             }
         }
-        let ty = a.get("type").and_then(|v| v.as_str()).unwrap_or("string").to_string();
+        let ty = a
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("string")
+            .to_string();
         let nullable = a.get("nullable").and_then(|v| v.as_bool()).unwrap_or(false);
         out.push(ProjectedField {
             name: name.to_string(),
@@ -730,7 +770,9 @@ mod tests {
         }));
 
         let violations = validate_dtos(&graph);
-        assert!(violations.iter().any(|v| v.rule == "dto-wrapper-requires-wraps"));
+        assert!(violations
+            .iter()
+            .any(|v| v.rule == "dto-wrapper-requires-wraps"));
     }
 
     #[test]
@@ -760,7 +802,9 @@ mod tests {
         }));
 
         let violations = validate_dtos(&graph);
-        assert!(violations.iter().any(|v| v.rule == "dto-wrapper-no-projection"));
+        assert!(violations
+            .iter()
+            .any(|v| v.rule == "dto-wrapper-no-projection"));
     }
 
     #[test]
@@ -782,7 +826,9 @@ mod tests {
         }));
 
         let violations = validate_dtos(&graph);
-        assert!(violations.iter().any(|v| v.rule == "dto-wrapper-wraps-resolves"));
+        assert!(violations
+            .iter()
+            .any(|v| v.rule == "dto-wrapper-wraps-resolves"));
     }
 
     #[test]
@@ -811,10 +857,15 @@ mod tests {
         }));
 
         let violations = validate_dtos(&graph);
-        let wrapper_violations: Vec<_> = violations.iter()
+        let wrapper_violations: Vec<_> = violations
+            .iter()
             .filter(|v| v.dto_id == "dto:UserResponse")
             .collect();
-        assert!(wrapper_violations.is_empty(), "Expected no violations, got: {:?}", wrapper_violations);
+        assert!(
+            wrapper_violations.is_empty(),
+            "Expected no violations, got: {:?}",
+            wrapper_violations
+        );
     }
 
     #[test]
@@ -835,10 +886,13 @@ mod tests {
                     ]
                 }
             }
-        })).unwrap();
+        }))
+        .unwrap();
 
         let violations = validate_dtos(&graph);
-        assert!(violations.iter().any(|v| v.rule == "dto-enum-requires-values"));
+        assert!(violations
+            .iter()
+            .any(|v| v.rule == "dto-enum-requires-values"));
     }
 
     #[test]
@@ -860,7 +914,9 @@ mod tests {
         }));
 
         let violations = validate_dtos(&graph);
-        assert!(violations.iter().any(|v| v.rule == "dto-enum-no-projection"));
+        assert!(violations
+            .iter()
+            .any(|v| v.rule == "dto-enum-no-projection"));
     }
 
     #[test]
@@ -882,13 +938,19 @@ mod tests {
                     ]
                 }
             }
-        })).unwrap();
+        }))
+        .unwrap();
 
         let violations = validate_dtos(&graph);
-        let enum_violations: Vec<_> = violations.iter()
+        let enum_violations: Vec<_> = violations
+            .iter()
             .filter(|v| v.dto_id == "dto:DeviceType")
             .collect();
-        assert!(enum_violations.is_empty(), "Expected no violations, got: {:?}", enum_violations);
+        assert!(
+            enum_violations.is_empty(),
+            "Expected no violations, got: {:?}",
+            enum_violations
+        );
     }
 
     #[test]
@@ -909,10 +971,13 @@ mod tests {
                     ]
                 }
             }
-        })).unwrap();
+        }))
+        .unwrap();
 
         let violations = validate_dtos(&graph);
-        assert!(violations.iter().any(|v| v.rule == "dto-map-requires-value-type"));
+        assert!(violations
+            .iter()
+            .any(|v| v.rule == "dto-map-requires-value-type"));
     }
 
     #[test]
@@ -956,13 +1021,19 @@ mod tests {
                     ]
                 }
             }
-        })).unwrap();
+        }))
+        .unwrap();
 
         let violations = validate_dtos(&graph);
-        let map_violations: Vec<_> = violations.iter()
+        let map_violations: Vec<_> = violations
+            .iter()
             .filter(|v| v.dto_id == "dto:PrepareUploadResponse")
             .collect();
-        assert!(map_violations.is_empty(), "Expected no violations, got: {:?}", map_violations);
+        assert!(
+            map_violations.is_empty(),
+            "Expected no violations, got: {:?}",
+            map_violations
+        );
     }
 
     #[test]
@@ -984,7 +1055,8 @@ mod tests {
                     ]
                 }
             }
-        })).unwrap();
+        }))
+        .unwrap();
 
         let violations = validate_dtos(&graph);
         assert!(violations.iter().any(|v| v.rule == "dto-unit-no-fields"));
@@ -1008,13 +1080,19 @@ mod tests {
                     ]
                 }
             }
-        })).unwrap();
+        }))
+        .unwrap();
 
         let violations = validate_dtos(&graph);
-        let unit_violations: Vec<_> = violations.iter()
+        let unit_violations: Vec<_> = violations
+            .iter()
             .filter(|v| v.dto_id == "dto:EmptyPayload")
             .collect();
-        assert!(unit_violations.is_empty(), "Expected no violations, got: {:?}", unit_violations);
+        assert!(
+            unit_violations.is_empty(),
+            "Expected no violations, got: {:?}",
+            unit_violations
+        );
     }
 
     #[test]
@@ -1035,13 +1113,22 @@ mod tests {
         }));
 
         let dtos = parse_dtos(&graph).unwrap();
-        assert_eq!(dtos[0].kind, DtoKind::Object, "Absent kind should default to Object");
-        
+        assert_eq!(
+            dtos[0].kind,
+            DtoKind::Object,
+            "Absent kind should default to Object"
+        );
+
         let violations = validate_dtos(&graph);
-        let dto_violations: Vec<_> = violations.iter()
+        let dto_violations: Vec<_> = violations
+            .iter()
             .filter(|v| v.dto_id == "dto:User")
             .collect();
-        assert!(dto_violations.is_empty(), "Expected no violations for backward-compat DTO, got: {:?}", dto_violations);
+        assert!(
+            dto_violations.is_empty(),
+            "Expected no violations for backward-compat DTO, got: {:?}",
+            dto_violations
+        );
     }
 
     // Wave 18: Paginated kind tests
@@ -1082,10 +1169,15 @@ mod tests {
         assert!(paginated.meta_fields.is_some());
 
         let violations = validate_dtos(&graph);
-        let pag_violations: Vec<_> = violations.iter()
+        let pag_violations: Vec<_> = violations
+            .iter()
             .filter(|v| v.dto_id == "dto:ChargeList")
             .collect();
-        assert!(pag_violations.is_empty(), "Expected no violations for Stripe-style paginated DTO, got: {:?}", pag_violations);
+        assert!(
+            pag_violations.is_empty(),
+            "Expected no violations for Stripe-style paginated DTO, got: {:?}",
+            pag_violations
+        );
     }
 
     #[test]
@@ -1120,13 +1212,21 @@ mod tests {
         let paginated = dtos.iter().find(|d| d.id == "dto:AccountArray").unwrap();
         assert_eq!(paginated.kind, DtoKind::Paginated);
         assert_eq!(paginated.items, Some("dto:AccountRead".to_string()));
-        assert_eq!(paginated.total_field, Some("meta.pagination.total".to_string()));
+        assert_eq!(
+            paginated.total_field,
+            Some("meta.pagination.total".to_string())
+        );
 
         let violations = validate_dtos(&graph);
-        let pag_violations: Vec<_> = violations.iter()
+        let pag_violations: Vec<_> = violations
+            .iter()
             .filter(|v| v.dto_id == "dto:AccountArray")
             .collect();
-        assert!(pag_violations.is_empty(), "Expected no violations for firefly-style paginated DTO, got: {:?}", pag_violations);
+        assert!(
+            pag_violations.is_empty(),
+            "Expected no violations for firefly-style paginated DTO, got: {:?}",
+            pag_violations
+        );
     }
 
     #[test]
@@ -1148,17 +1248,23 @@ mod tests {
                     ]
                 }
             }
-        })).unwrap();
+        }))
+        .unwrap();
 
         let dtos = parse_dtos(&graph).unwrap();
         assert_eq!(dtos[0].kind, DtoKind::Paginated);
         assert_eq!(dtos[0].items, Some("string".to_string()));
 
         let violations = validate_dtos(&graph);
-        let pag_violations: Vec<_> = violations.iter()
+        let pag_violations: Vec<_> = violations
+            .iter()
             .filter(|v| v.dto_id == "dto:SimpleList")
             .collect();
-        assert!(pag_violations.is_empty(), "Expected no violations for minimal paginated DTO, got: {:?}", pag_violations);
+        assert!(
+            pag_violations.is_empty(),
+            "Expected no violations for minimal paginated DTO, got: {:?}",
+            pag_violations
+        );
     }
 
     #[test]
@@ -1201,10 +1307,15 @@ mod tests {
         assert!(paginated.meta_fields.as_ref().unwrap().contains_key("url"));
 
         let violations = validate_dtos(&graph);
-        let pag_violations: Vec<_> = violations.iter()
+        let pag_violations: Vec<_> = violations
+            .iter()
             .filter(|v| v.dto_id == "dto:FullList")
             .collect();
-        assert!(pag_violations.is_empty(), "Expected no violations for full-form paginated DTO, got: {:?}", pag_violations);
+        assert!(
+            pag_violations.is_empty(),
+            "Expected no violations for full-form paginated DTO, got: {:?}",
+            pag_violations
+        );
     }
 
     #[test]
@@ -1225,10 +1336,13 @@ mod tests {
                     ]
                 }
             }
-        })).unwrap();
+        }))
+        .unwrap();
 
         let violations = validate_dtos(&graph);
-        assert!(violations.iter().any(|v| v.rule == "dto-paginated-requires-items"));
+        assert!(violations
+            .iter()
+            .any(|v| v.rule == "dto-paginated-requires-items"));
     }
 
     #[test]
@@ -1251,6 +1365,8 @@ mod tests {
         }));
 
         let violations = validate_dtos(&graph);
-        assert!(violations.iter().any(|v| v.rule == "dto-paginated-no-projection"));
+        assert!(violations
+            .iter()
+            .any(|v| v.rule == "dto-paginated-no-projection"));
     }
 }

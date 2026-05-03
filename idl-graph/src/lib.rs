@@ -28,12 +28,13 @@ pub mod validate;
 
 pub use doc::{ConfidenceDoc, EdgeDoc, GraphDoc, NodeDoc, RangeDoc, SourceAnchorDoc};
 pub use drift::{
-    diff_against_source, diff_against_sources, diff_graphs, AnchorEntry, AnchorReport, AnchorVerdict, DriftEntry,
-    DriftEvent, DriftReport, DriftSeverity, PropChange,
+    diff_against_source, diff_against_sources, diff_graphs, AnchorEntry, AnchorReport,
+    AnchorVerdict, DriftEntry, DriftEvent, DriftReport, DriftSeverity, PropChange,
 };
+#[allow(deprecated)]
 pub use extensions_dto::{
-    parse_dtos, project_field_set, projected_fields_ordered, validate_dtos, compute_projected_fields,
-    DtoDefinition, DtoExtra, DtoKind, DtoViolation, ProjectedField,
+    compute_projected_fields, parse_dtos, project_field_set, projected_fields_ordered,
+    validate_dtos, DtoDefinition, DtoExtra, DtoKind, DtoViolation, ProjectedField,
 };
 pub use extensions_when::{parse_when, When, WhenStructured, WhenVar};
 

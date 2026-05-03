@@ -40,10 +40,7 @@ pub fn accept(intent_dir: &Path, session: &mut Session) -> Result<AcceptOutcome>
     let change_id = format!("{next:04}-{slug}");
     let folder = intent_dir.join("changes").join(&change_id);
     if folder.exists() {
-        return Err(anyhow!(
-            "change folder {} already exists",
-            folder.display()
-        ));
+        return Err(anyhow!("change folder {} already exists", folder.display()));
     }
     std::fs::create_dir_all(folder.join("ai-runs"))?;
     std::fs::create_dir_all(folder.join("verifications"))?;
@@ -153,8 +150,7 @@ fn validate_kernel(graph: &Value) -> Result<()> {
                 .get("kind")
                 .and_then(Value::as_str)
                 .ok_or_else(|| anyhow!("edge missing kind"))?;
-            EdgeKind::from_str(kind)
-                .map_err(|_| anyhow!("non-kernel edge kind `{kind}`"))?;
+            EdgeKind::from_str(kind).map_err(|_| anyhow!("non-kernel edge kind `{kind}`"))?;
         }
     }
     Ok(())
@@ -188,10 +184,9 @@ fn derive_slug(topic: &str) -> String {
     for c in topic.to_lowercase().chars() {
         if c.is_ascii_alphanumeric() {
             s.push(c);
-        } else if c.is_whitespace() || c == '-' || c == '_' {
-            if !s.ends_with('-') && !s.is_empty() {
-                s.push('-');
-            }
+        } else if (c.is_whitespace() || c == '-' || c == '_') && !s.ends_with('-') && !s.is_empty()
+        {
+            s.push('-');
         }
     }
     while s.ends_with('-') {
@@ -286,8 +281,11 @@ fn days_to_ymd(mut days: i64) -> (i32, u32, u32) {
     days += 719_468;
     let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
     let doe = (days - era * 146_097) as u32;
-    let yoe =
-        (doe.wrapping_sub(doe / 1460).wrapping_sub(doe / 36_524).wrapping_add(doe / 146_096)) / 365;
+    let yoe = (doe
+        .wrapping_sub(doe / 1460)
+        .wrapping_sub(doe / 36_524)
+        .wrapping_add(doe / 146_096))
+        / 365;
     let y = yoe as i64 + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;

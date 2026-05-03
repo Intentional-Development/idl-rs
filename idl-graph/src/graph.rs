@@ -79,10 +79,7 @@ impl Graph {
     }
 
     /// Iterate every edge of a specific kind.
-    pub fn iter_edges_by_kind<'a>(
-        &'a self,
-        kind: EdgeKind,
-    ) -> impl Iterator<Item = &'a Edge> + 'a {
+    pub fn iter_edges_by_kind<'a>(&'a self, kind: EdgeKind) -> impl Iterator<Item = &'a Edge> + 'a {
         self.edges.values().filter(move |e| e.kind == kind)
     }
 

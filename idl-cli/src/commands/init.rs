@@ -27,8 +27,7 @@ pub fn run(
     }
 
     let intent = dir.join("intent");
-    std::fs::create_dir_all(&intent)
-        .with_context(|| format!("create {}", intent.display()))?;
+    std::fs::create_dir_all(&intent).with_context(|| format!("create {}", intent.display()))?;
 
     write_config(&intent, brownfield)?;
 
@@ -61,7 +60,10 @@ fn write_config(intent: &Path, brownfield: bool) -> Result<()> {
         "kernel_version": "v0.1.0",
         "created_by": "idl init"
     });
-    std::fs::write(dot.join("config.json"), serde_json::to_string_pretty(&cfg)? + "\n")?;
+    std::fs::write(
+        dot.join("config.json"),
+        serde_json::to_string_pretty(&cfg)? + "\n",
+    )?;
     Ok(())
 }
 
@@ -107,7 +109,12 @@ const BOOTSTRAP_DECISION_BROWNFIELD: &str = "# Decision: promote extraction\n\n\
 - **Decision:** Pending extraction run; promote inferred intent to accepted blocks.\n\
 - **Consequences:** Establishes the canonical `project.idl` from existing code.\n";
 
-pub fn scaffold_change(intent: &Path, slug: &str, state: &str, decision_template: &str) -> Result<()> {
+pub fn scaffold_change(
+    intent: &Path,
+    slug: &str,
+    state: &str,
+    decision_template: &str,
+) -> Result<()> {
     let folder = intent.join("changes").join(slug);
     std::fs::create_dir_all(&folder)?;
 
@@ -157,7 +164,11 @@ fn days_to_ymd(mut days: i64) -> (i32, u32, u32) {
     days += 719_468;
     let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
     let doe = (days - era * 146_097) as u32;
-    let yoe = (doe.wrapping_sub(doe / 1460).wrapping_sub(doe / 36_524).wrapping_add(doe / 146_096)) / 365;
+    let yoe = (doe
+        .wrapping_sub(doe / 1460)
+        .wrapping_sub(doe / 36_524)
+        .wrapping_add(doe / 146_096))
+        / 365;
     let y = yoe as i32 + era as i32 * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;

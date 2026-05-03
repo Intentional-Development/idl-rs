@@ -41,6 +41,14 @@ jobs:
       - name: Run round-trip integration tests
         run: cargo test --test round_trip -p idl-proposals -- --test-threads=1
 
+      - name: Run status and drift gate fixture
+        run: |
+          cargo run -p idl-cli -- emit typescript fixtures/v1-gate/idl.graph.json --out fixtures/v1-gate/generated/typescript
+          cargo run -p idl-cli -- emit python fixtures/v1-gate/idl.graph.json --out fixtures/v1-gate/generated/python
+          cargo run -p idl-cli -- emit rust fixtures/v1-gate/idl.graph.json --out fixtures/v1-gate/generated/rust
+          (cd fixtures/v1-gate && cargo run -p idl-cli --manifest-path ../../Cargo.toml -- status)
+          (cd fixtures/v1-gate && cargo run -p idl-cli --manifest-path ../../Cargo.toml -- drift --gate)
+
   lint:
     name: Lint and Format Check
     runs-on: ubuntu-latest

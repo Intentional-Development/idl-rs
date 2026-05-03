@@ -11,7 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::doc::{EdgeDoc, GraphDoc, NodeDoc, RangeDoc, SourceAnchorDoc};
+use crate::doc::{EdgeDoc, GraphDoc, NodeDoc};
+#[cfg(test)]
+use crate::doc::{RangeDoc, SourceAnchorDoc};
 
 /// Severity for a single drift event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -26,18 +28,48 @@ pub enum DriftSeverity {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DriftEvent {
-    NodeAdded { id: String, node_kind: String, state: String },
-    NodeRemoved { id: String, node_kind: String, state: String },
-    NodeStateChanged { id: String, from: String, to: String },
+    NodeAdded {
+        id: String,
+        node_kind: String,
+        state: String,
+    },
+    NodeRemoved {
+        id: String,
+        node_kind: String,
+        state: String,
+    },
+    NodeStateChanged {
+        id: String,
+        from: String,
+        to: String,
+    },
     NodePropsChanged {
         id: String,
         node_kind: String,
         changed: Vec<PropChange>,
     },
-    NodeAnchorMoved { id: String, before: String, after: String },
-    EdgeAdded { id: String, edge_kind: String, from: String, to: String },
-    EdgeRemoved { id: String, edge_kind: String, from: String, to: String },
-    EdgeRetargeted { id: String, before: String, after: String },
+    NodeAnchorMoved {
+        id: String,
+        before: String,
+        after: String,
+    },
+    EdgeAdded {
+        id: String,
+        edge_kind: String,
+        from: String,
+        to: String,
+    },
+    EdgeRemoved {
+        id: String,
+        edge_kind: String,
+        from: String,
+        to: String,
+    },
+    EdgeRetargeted {
+        id: String,
+        before: String,
+        after: String,
+    },
 }
 
 /// A single property change on a node.
@@ -154,25 +186,47 @@ impl DriftReport {
 
 fn summarize_event(e: &DriftEvent) -> String {
     match e {
-        DriftEvent::NodeAdded { id, node_kind, state } => {
+        DriftEvent::NodeAdded {
+            id,
+            node_kind,
+            state,
+        } => {
             format!("+ node {id} ({node_kind}, {state})")
         }
-        DriftEvent::NodeRemoved { id, node_kind, state } => {
+        DriftEvent::NodeRemoved {
+            id,
+            node_kind,
+            state,
+        } => {
             format!("- node {id} ({node_kind}, {state})")
         }
         DriftEvent::NodeStateChanged { id, from, to } => {
             format!("~ node {id} state {from} → {to}")
         }
-        DriftEvent::NodePropsChanged { id, node_kind: _, changed } => {
+        DriftEvent::NodePropsChanged {
+            id,
+            node_kind: _,
+            changed,
+        } => {
             format!("~ node {id} props ({} changed)", changed.len())
         }
         DriftEvent::NodeAnchorMoved { id, before, after } => {
             format!("~ node {id} anchor moved {before} → {after}")
         }
-        DriftEvent::EdgeAdded { id, edge_kind, from, to } => {
+        DriftEvent::EdgeAdded {
+            id,
+            edge_kind,
+            from,
+            to,
+        } => {
             format!("+ edge {id} ({edge_kind}: {from} → {to})")
         }
-        DriftEvent::EdgeRemoved { id, edge_kind, from, to } => {
+        DriftEvent::EdgeRemoved {
+            id,
+            edge_kind,
+            from,
+            to,
+        } => {
             format!("- edge {id} ({edge_kind}: {from} → {to})")
         }
         DriftEvent::EdgeRetargeted { id, before, after } => {
@@ -334,9 +388,15 @@ fn format_range(r: &Option<crate::doc::RangeDoc>) -> String {
         None => "-".into(),
         Some(r) => format!(
             "{}:{}-{}",
-            r.start_line.map(|x| x.to_string()).unwrap_or_else(|| "?".into()),
-            r.start_byte.map(|x| x.to_string()).unwrap_or_else(|| "?".into()),
-            r.end_line.map(|x| x.to_string()).unwrap_or_else(|| "?".into()),
+            r.start_line
+                .map(|x| x.to_string())
+                .unwrap_or_else(|| "?".into()),
+            r.start_byte
+                .map(|x| x.to_string())
+                .unwrap_or_else(|| "?".into()),
+            r.end_line
+                .map(|x| x.to_string())
+                .unwrap_or_else(|| "?".into()),
         ),
     }
 }
@@ -422,16 +482,28 @@ pub struct AnchorReport {
 
 impl AnchorReport {
     pub fn aligned(&self) -> usize {
-        self.entries.iter().filter(|e| e.verdict == AnchorVerdict::Aligned).count()
+        self.entries
+            .iter()
+            .filter(|e| e.verdict == AnchorVerdict::Aligned)
+            .count()
     }
     pub fn shifted(&self) -> usize {
-        self.entries.iter().filter(|e| e.verdict == AnchorVerdict::Shifted).count()
+        self.entries
+            .iter()
+            .filter(|e| e.verdict == AnchorVerdict::Shifted)
+            .count()
     }
     pub fn missing(&self) -> usize {
-        self.entries.iter().filter(|e| e.verdict == AnchorVerdict::Missing).count()
+        self.entries
+            .iter()
+            .filter(|e| e.verdict == AnchorVerdict::Missing)
+            .count()
     }
     pub fn new_in_code(&self) -> usize {
-        self.entries.iter().filter(|e| e.verdict == AnchorVerdict::NewInCode).count()
+        self.entries
+            .iter()
+            .filter(|e| e.verdict == AnchorVerdict::NewInCode)
+            .count()
     }
     /// 0 aligned · 1 missing (breaking) · 2 new-in-code (additive) · 3 shifted (cosmetic).
     pub fn exit_code(&self) -> u8 {
@@ -496,7 +568,11 @@ pub fn diff_against_source(
     graph: &GraphDoc,
     source_root: &std::path::Path,
 ) -> AnchorReport {
-    diff_against_sources(graph_path, graph, &[(String::new(), source_root.to_path_buf())])
+    diff_against_sources(
+        graph_path,
+        graph,
+        &[(String::new(), source_root.to_path_buf())],
+    )
 }
 
 /// Multi-root variant. `mappings` is a list of `(corpus_name, root_path)`
@@ -510,7 +586,13 @@ pub fn diff_against_sources(
 ) -> AnchorReport {
     let source_root = mappings
         .iter()
-        .map(|(c, p)| if c.is_empty() { p.display().to_string() } else { format!("{c}={}", p.display()) })
+        .map(|(c, p)| {
+            if c.is_empty() {
+                p.display().to_string()
+            } else {
+                format!("{c}={}", p.display())
+            }
+        })
         .collect::<Vec<_>>()
         .join(",");
     let mut report = AnchorReport {
@@ -671,7 +753,12 @@ mod tests {
         let b = doc_with(vec![n("e:2", "entity", "proposed")], vec![]);
         let r = diff_graphs("a", &a, "b", &b);
         assert_eq!(r.entries.len(), 2);
-        assert_eq!(r.breaking(), 1, "removing accepted is breaking: {:?}", r.entries);
+        assert_eq!(
+            r.breaking(),
+            1,
+            "removing accepted is breaking: {:?}",
+            r.entries
+        );
         assert_eq!(r.additive(), 1);
     }
 
@@ -684,8 +771,14 @@ mod tests {
         let a = doc_with(vec![n1], vec![]);
         let b = doc_with(vec![n2], vec![]);
         let r = diff_graphs("a", &a, "b", &b);
-        assert!(r.entries.iter().any(|e| matches!(e.event, DriftEvent::NodeStateChanged{..})));
-        assert!(r.entries.iter().any(|e| matches!(e.event, DriftEvent::NodePropsChanged{..})));
+        assert!(r
+            .entries
+            .iter()
+            .any(|e| matches!(e.event, DriftEvent::NodeStateChanged { .. })));
+        assert!(r
+            .entries
+            .iter()
+            .any(|e| matches!(e.event, DriftEvent::NodePropsChanged { .. })));
         assert!(r.breaking() > 0);
     }
 
@@ -739,7 +832,12 @@ mod tests {
         );
         let r = diff_against_source("g", &g, &tmp);
         assert_eq!(r.entries.len(), 1);
-        assert_eq!(r.entries[0].verdict, AnchorVerdict::Aligned, "{:?}", r.entries[0]);
+        assert_eq!(
+            r.entries[0].verdict,
+            AnchorVerdict::Aligned,
+            "{:?}",
+            r.entries[0]
+        );
         assert_eq!(r.shifted(), 0);
     }
 
@@ -756,19 +854,35 @@ mod tests {
             "entity:x",
             "entity",
             "x.txt",
-            Some(RangeDoc { start_line: Some(1), end_line: Some(4), ..Default::default() }),
+            Some(RangeDoc {
+                start_line: Some(1),
+                end_line: Some(4),
+                ..Default::default()
+            }),
         );
         let r = diff_against_source("g", &doc_with(vec![off_by_one], vec![]), &tmp);
-        assert_eq!(r.entries[0].verdict, AnchorVerdict::Aligned, "off-by-one EOF should align");
+        assert_eq!(
+            r.entries[0].verdict,
+            AnchorVerdict::Aligned,
+            "off-by-one EOF should align"
+        );
 
         let real_overrun = anchored_node(
             "entity:y",
             "entity",
             "x.txt",
-            Some(RangeDoc { start_line: Some(1), end_line: Some(99), ..Default::default() }),
+            Some(RangeDoc {
+                start_line: Some(1),
+                end_line: Some(99),
+                ..Default::default()
+            }),
         );
         let r = diff_against_source("g", &doc_with(vec![real_overrun], vec![]), &tmp);
-        assert_eq!(r.entries[0].verdict, AnchorVerdict::Shifted, ">+1 overrun stays shifted");
+        assert_eq!(
+            r.entries[0].verdict,
+            AnchorVerdict::Shifted,
+            ">+1 overrun stays shifted"
+        );
     }
 
     /// Bug B — multi-source mappings route `repo://<corpus>/...` to the
@@ -788,7 +902,11 @@ mod tests {
                 "decision:idl",
                 "decision",
                 "repo://IDL/notes.md",
-                Some(RangeDoc { start_line: Some(1), end_line: Some(1), ..Default::default() }),
+                Some(RangeDoc {
+                    start_line: Some(1),
+                    end_line: Some(1),
+                    ..Default::default()
+                }),
             ),
         ];
         let mappings = vec![
@@ -796,7 +914,12 @@ mod tests {
             ("IDL".to_string(), idl_root.clone()),
         ];
         let r = diff_against_sources("g", &doc_with(nodes, vec![]), &mappings);
-        assert_eq!(r.aligned(), 2, "both URIs should resolve under their mapped root: {:?}", r.entries);
+        assert_eq!(
+            r.aligned(),
+            2,
+            "both URIs should resolve under their mapped root: {:?}",
+            r.entries
+        );
         assert_eq!(r.missing(), 0);
     }
 
@@ -807,16 +930,22 @@ mod tests {
         let tmp = tempdir_in_target("drift-verdict");
         let dir = tmp.join("src");
         std::fs::create_dir_all(&dir).unwrap();
-        let g = doc_with(
-            vec![anchored_node("scope:s", "scope", "src", None)],
-            vec![],
-        );
+        let g = doc_with(vec![anchored_node("scope:s", "scope", "src", None)], vec![]);
         let r = diff_against_source("g", &g, &tmp);
         let md = r.to_markdown();
         let human = r.to_human();
-        assert!(md.contains("`aligned`"), "markdown should use lowercase verdict, got:\n{md}");
-        assert!(!md.contains("`Aligned`"), "markdown leaks Debug casing:\n{md}");
-        assert!(human.contains("[aligned]"), "human should use lowercase verdict:\n{human}");
+        assert!(
+            md.contains("`aligned`"),
+            "markdown should use lowercase verdict, got:\n{md}"
+        );
+        assert!(
+            !md.contains("`Aligned`"),
+            "markdown leaks Debug casing:\n{md}"
+        );
+        assert!(
+            human.contains("[aligned]"),
+            "human should use lowercase verdict:\n{human}"
+        );
 
         // JSON already lowercase via serde rename_all.
         let j = r.to_json();

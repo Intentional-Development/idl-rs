@@ -19,38 +19,62 @@ fn node(id: &str, kind: &str, props: serde_json::Value) -> NodeDoc {
 
 fn fixture() -> GraphDoc {
     let nodes = vec![
-        node("entity:user", "entity", json!({
-            "name": "User",
-            "attributes": [
-                {"name":"id","type":"int","unique":true},
-                {"name":"email","type":"string","unique":true},
-                {"name":"bio","type":"string","nullable":true}
-            ]
-        })),
-        node("entity:article", "entity", json!({
-            "name": "Article",
-            "attributes": [
-                {"name":"slug","type":"string","unique":true},
-                {"name":"title","type":"string"}
-            ]
-        })),
-        node("entity:tag", "entity", json!({"name":"Tag","attributes":[{"name":"name","type":"string"}]})),
-        node("operation:create-article", "operation", json!({
-            "name":"create-article",
-            "inputs":[{"name":"title","type":"string"},{"name":"body","type":"string"}],
-            "outputs":[{"name":"article","type":"Article"}]
-        })),
-        node("operation:get-tags", "operation", json!({
-            "name":"get-tags","inputs":[],"outputs":[{"name":"tags","type":"json"}]
-        })),
-        node("api:fixture", "api", json!({
-            "name":"fixture",
-            "protocol":"rest",
-            "endpoints":[
-                {"method":"POST","path":"/articles","operation_id":"operation:create-article"},
-                {"method":"GET","path":"/tags","operation_id":"operation:get-tags"}
-            ]
-        })),
+        node(
+            "entity:user",
+            "entity",
+            json!({
+                "name": "User",
+                "attributes": [
+                    {"name":"id","type":"int","unique":true},
+                    {"name":"email","type":"string","unique":true},
+                    {"name":"bio","type":"string","nullable":true}
+                ]
+            }),
+        ),
+        node(
+            "entity:article",
+            "entity",
+            json!({
+                "name": "Article",
+                "attributes": [
+                    {"name":"slug","type":"string","unique":true},
+                    {"name":"title","type":"string"}
+                ]
+            }),
+        ),
+        node(
+            "entity:tag",
+            "entity",
+            json!({"name":"Tag","attributes":[{"name":"name","type":"string"}]}),
+        ),
+        node(
+            "operation:create-article",
+            "operation",
+            json!({
+                "name":"create-article",
+                "inputs":[{"name":"title","type":"string"},{"name":"body","type":"string"}],
+                "outputs":[{"name":"article","type":"Article"}]
+            }),
+        ),
+        node(
+            "operation:get-tags",
+            "operation",
+            json!({
+                "name":"get-tags","inputs":[],"outputs":[{"name":"tags","type":"json"}]
+            }),
+        ),
+        node(
+            "api:fixture",
+            "api",
+            json!({
+                "name":"fixture",
+                "protocol":"rest",
+                "endpoints":[
+                    {"method":"POST","path":"/articles","operation_id":"operation:create-article"},
+                    {"method":"GET","path":"/tags","operation_id":"operation:get-tags"}
+                ]
+            }),
+        ),
     ];
     let edges = vec![EdgeDoc {
         id: "e1".into(),
@@ -72,14 +96,26 @@ fn fixture() -> GraphDoc {
 fn rust_emitter_covers_kernel_kinds() {
     let g = fixture();
     let r = RustEmitter.emit(&g).unwrap();
-    let entities = r.files.iter().find(|f| f.path.ends_with("entities.rs")).expect("entities.rs");
+    let entities = r
+        .files
+        .iter()
+        .find(|f| f.path.ends_with("entities.rs"))
+        .expect("entities.rs");
     assert!(entities.content.contains("pub struct User"));
     assert!(entities.content.contains("pub struct Article"));
     assert!(entities.content.contains("// GENERATED_FROM entity:user"));
-    let ops = r.files.iter().find(|f| f.path.ends_with("operations.rs")).unwrap();
+    let ops = r
+        .files
+        .iter()
+        .find(|f| f.path.ends_with("operations.rs"))
+        .unwrap();
     assert!(ops.content.contains("trait Operations"));
     assert!(ops.content.contains("fn create_article"));
-    let routes = r.files.iter().find(|f| f.path.ends_with("routes.rs")).unwrap();
+    let routes = r
+        .files
+        .iter()
+        .find(|f| f.path.ends_with("routes.rs"))
+        .unwrap();
     assert!(routes.content.contains(".route(\"/articles\", post"));
     assert!(r.total_loc() > 20);
 }
@@ -88,7 +124,11 @@ fn rust_emitter_covers_kernel_kinds() {
 fn typescript_emitter_covers_kernel_kinds() {
     let g = fixture();
     let r = TypeScriptEmitter.emit(&g).unwrap();
-    let ents = r.files.iter().find(|f| f.path.ends_with("entities.ts")).unwrap();
+    let ents = r
+        .files
+        .iter()
+        .find(|f| f.path.ends_with("entities.ts"))
+        .unwrap();
     assert!(ents.content.contains("export interface User"));
     assert!(ents.content.contains("bio?: string"));
     let api = r.files.iter().find(|f| f.path.ends_with("api.ts")).unwrap();
@@ -140,8 +180,13 @@ fn openapi_emitter_groups_methods_under_one_path_key() {
             }),
         ),
     ];
-    let g = GraphDoc { version: "0.1.0".into(), metadata: json!({"project":"x"}),
-        nodes, edges: vec![], extensions: None };
+    let g = GraphDoc {
+        version: "0.1.0".into(),
+        metadata: json!({"project":"x"}),
+        nodes,
+        edges: vec![],
+        extensions: None,
+    };
     let r = OpenApiEmitter.emit(&g).unwrap();
     let y = &r.files[0].content;
     // Exactly ONE `/articles:` path key.
@@ -207,28 +252,40 @@ fn openapi_emitter_emits_components_schemas_with_refs() {
 #[test]
 fn openapi_emitter_emits_dto_projection_for_accepts_dto() {
     let nodes = vec![
-        node("entity:user", "entity", json!({
-            "name": "User",
-            "attributes": [
-                {"name":"id","type":"int","unique":true},
-                {"name":"email","type":"string"},
-                {"name":"username","type":"string"},
-                {"name":"password","type":"string"},
-                {"name":"bio","type":"string","nullable":true},
-                {"name":"image","type":"string","nullable":true}
-            ]
-        })),
-        node("operation:login-user", "operation", json!({
-            "name":"login-user",
-            "inputs":[{"name":"email","type":"string"},{"name":"password","type":"string"}],
-            "outputs":[],
-            "side_effects":[],
-            "accepts": {"dto": "dto:LoginUser"}
-        })),
-        node("api:auth", "api", json!({
-            "name":"auth","protocol":"rest",
-            "endpoints":[{"method":"POST","path":"/users/login","operation_id":"operation:login-user"}]
-        })),
+        node(
+            "entity:user",
+            "entity",
+            json!({
+                "name": "User",
+                "attributes": [
+                    {"name":"id","type":"int","unique":true},
+                    {"name":"email","type":"string"},
+                    {"name":"username","type":"string"},
+                    {"name":"password","type":"string"},
+                    {"name":"bio","type":"string","nullable":true},
+                    {"name":"image","type":"string","nullable":true}
+                ]
+            }),
+        ),
+        node(
+            "operation:login-user",
+            "operation",
+            json!({
+                "name":"login-user",
+                "inputs":[{"name":"email","type":"string"},{"name":"password","type":"string"}],
+                "outputs":[],
+                "side_effects":[],
+                "accepts": {"dto": "dto:LoginUser"}
+            }),
+        ),
+        node(
+            "api:auth",
+            "api",
+            json!({
+                "name":"auth","protocol":"rest",
+                "endpoints":[{"method":"POST","path":"/users/login","operation_id":"operation:login-user"}]
+            }),
+        ),
     ];
     let g = GraphDoc {
         version: "0.1.2".into(),
@@ -251,10 +308,17 @@ fn openapi_emitter_emits_dto_projection_for_accepts_dto() {
     let r = OpenApiEmitter.emit(&g).unwrap();
     let y = &r.files[0].content;
     let parsed: serde_yaml::Value = serde_yaml::from_str(y).expect("yaml parses");
-    let schemas = parsed.get("components").and_then(|c| c.get("schemas")).unwrap();
+    let schemas = parsed
+        .get("components")
+        .and_then(|c| c.get("schemas"))
+        .unwrap();
 
     let login = schemas.get("LoginUser").expect("LoginUser DTO emitted");
-    let props = login.get("properties").expect("LoginUser has properties").as_mapping().unwrap();
+    let props = login
+        .get("properties")
+        .expect("LoginUser has properties")
+        .as_mapping()
+        .unwrap();
     let prop_names: std::collections::BTreeSet<_> =
         props.keys().filter_map(|k| k.as_str()).collect();
     assert_eq!(
@@ -265,17 +329,24 @@ fn openapi_emitter_emits_dto_projection_for_accepts_dto() {
 
     // Stub Body schema must NOT be emitted when accepts.dto is set.
     assert!(
-        schemas.get("BodyLogin-user").is_none()
-            && schemas.get("BodyLoginUser").is_none(),
+        schemas.get("BodyLogin-user").is_none() && schemas.get("BodyLoginUser").is_none(),
         "stub body should be suppressed when accepts.dto is present"
     );
 
     // requestBody $ref points at the DTO.
-    let post = parsed.get("paths").and_then(|p| p.get("/users/login"))
-        .and_then(|p| p.get("post")).unwrap();
-    let r = post.get("requestBody").and_then(|b| b.get("content"))
-        .and_then(|c| c.get("application/json")).and_then(|j| j.get("schema"))
-        .and_then(|s| s.get("$ref")).and_then(|v| v.as_str()).unwrap();
+    let post = parsed
+        .get("paths")
+        .and_then(|p| p.get("/users/login"))
+        .and_then(|p| p.get("post"))
+        .unwrap();
+    let r = post
+        .get("requestBody")
+        .and_then(|b| b.get("content"))
+        .and_then(|c| c.get("application/json"))
+        .and_then(|j| j.get("schema"))
+        .and_then(|s| s.get("$ref"))
+        .and_then(|v| v.as_str())
+        .unwrap();
     assert_eq!(r, "#/components/schemas/LoginUser");
 }
 
@@ -283,17 +354,21 @@ fn openapi_emitter_emits_dto_projection_for_accepts_dto() {
 /// emits `required` exactly as declared.
 #[test]
 fn openapi_emitter_dto_omit_extras_required() {
-    let nodes = vec![node("entity:user", "entity", json!({
-        "name": "User",
-        "attributes": [
-            {"name":"id","type":"int","unique":true},
-            {"name":"email","type":"string"},
-            {"name":"username","type":"string"},
-            {"name":"password","type":"string"},
-            {"name":"bio","type":"string","nullable":true},
-            {"name":"image","type":"string","nullable":true}
-        ]
-    }))];
+    let nodes = vec![node(
+        "entity:user",
+        "entity",
+        json!({
+            "name": "User",
+            "attributes": [
+                {"name":"id","type":"int","unique":true},
+                {"name":"email","type":"string"},
+                {"name":"username","type":"string"},
+                {"name":"password","type":"string"},
+                {"name":"bio","type":"string","nullable":true},
+                {"name":"image","type":"string","nullable":true}
+            ]
+        }),
+    )];
     let g = GraphDoc {
         version: "0.1.2".into(),
         metadata: json!({"project":"dto"}),
@@ -316,18 +391,39 @@ fn openapi_emitter_dto_omit_extras_required() {
     let r = OpenApiEmitter.emit(&g).unwrap();
     let y = &r.files[0].content;
     let parsed: serde_yaml::Value = serde_yaml::from_str(y).expect("yaml parses");
-    let user = parsed.get("components").and_then(|c| c.get("schemas"))
-        .and_then(|s| s.get("User")).expect("User DTO emitted");
-    let props: std::collections::BTreeSet<_> = user.get("properties").unwrap()
-        .as_mapping().unwrap().keys().filter_map(|k| k.as_str()).collect();
+    let user = parsed
+        .get("components")
+        .and_then(|c| c.get("schemas"))
+        .and_then(|s| s.get("User"))
+        .expect("User DTO emitted");
+    let props: std::collections::BTreeSet<_> = user
+        .get("properties")
+        .unwrap()
+        .as_mapping()
+        .unwrap()
+        .keys()
+        .filter_map(|k| k.as_str())
+        .collect();
     assert_eq!(
         props,
-        ["email", "username", "bio", "image", "token"].iter().copied().collect()
+        ["email", "username", "bio", "image", "token"]
+            .iter()
+            .copied()
+            .collect()
     );
-    let req: std::collections::BTreeSet<_> = user.get("required").unwrap().as_sequence().unwrap()
-        .iter().filter_map(|v| v.as_str()).collect();
+    let req: std::collections::BTreeSet<_> = user
+        .get("required")
+        .unwrap()
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
     assert_eq!(
         req,
-        ["email", "username", "bio", "image", "token"].iter().copied().collect()
+        ["email", "username", "bio", "image", "token"]
+            .iter()
+            .copied()
+            .collect()
     );
 }

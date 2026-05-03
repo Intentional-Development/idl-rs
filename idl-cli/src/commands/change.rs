@@ -56,7 +56,11 @@ pub fn list() -> Result<ExitCode> {
         let state = std::fs::read_to_string(e.path().join("state.json"))
             .ok()
             .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("state").and_then(|x| x.as_str()).map(|s| s.to_string()))
+            .and_then(|v| {
+                v.get("state")
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string())
+            })
             .unwrap_or_else(|| "?".into());
         println!("  {name}  [{state}]");
     }
@@ -64,9 +68,7 @@ pub fn list() -> Result<ExitCode> {
 }
 
 pub fn stub(verb: &str, id: &str) -> Result<ExitCode> {
-    println!(
-        "TODO: implement `idl change {verb} {id}` after extractor / accept pipeline lands."
-    );
+    println!("TODO: implement `idl change {verb} {id}` after extractor / accept pipeline lands.");
     Ok(ExitCode::from(0))
 }
 

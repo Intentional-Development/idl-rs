@@ -36,7 +36,10 @@ impl GraphEmitter for OpenApiEmitter {
     }
 
     fn emit(&self, graph: &GraphDoc) -> Result<EmitReport> {
-        let mut report = EmitReport { target: "openapi".into(), ..Default::default() };
+        let mut report = EmitReport {
+            target: "openapi".into(),
+            ..Default::default()
+        };
 
         let title = graph
             .metadata
@@ -80,7 +83,11 @@ impl GraphEmitter for OpenApiEmitter {
                         .and_then(|v| v.as_str())
                         .unwrap_or("GET")
                         .to_lowercase();
-                    let path = ep.get("path").and_then(|v| v.as_str()).unwrap_or("/").to_string();
+                    let path = ep
+                        .get("path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("/")
+                        .to_string();
                     let opid = ep
                         .get("operation_id")
                         .and_then(|v| v.as_str())
@@ -92,15 +99,14 @@ impl GraphEmitter for OpenApiEmitter {
                     let mut response_schema: Option<String> = None;
                     if let Some(op) = op_node {
                         // Wave 12: prefer accepts.dto / returns.dto.
-                        let dto_ref =
-                            |axis: &str| -> Option<String> {
-                                op.props
-                                    .get(axis)
-                                    .and_then(|v| v.get("dto"))
-                                    .and_then(|v| v.as_str())
-                                    .filter(|id| dto_by_id.contains_key(*id))
-                                    .map(|id| dto_name(id))
-                            };
+                        let dto_ref = |axis: &str| -> Option<String> {
+                            op.props
+                                .get(axis)
+                                .and_then(|v| v.get("dto"))
+                                .and_then(|v| v.as_str())
+                                .filter(|id| dto_by_id.contains_key(*id))
+                                .map(&dto_name)
+                        };
                         if let Some(name) = dto_ref("accepts") {
                             request_schema = Some(name);
                         }
@@ -111,8 +117,7 @@ impl GraphEmitter for OpenApiEmitter {
                         // Legacy stub fallback: if no accepts.dto, fabricate
                         // BodyOpName from inputs (Wave 10 behaviour).
                         if request_schema.is_none() {
-                            if let Some(inputs) =
-                                op.props.get("inputs").and_then(|v| v.as_array())
+                            if let Some(inputs) = op.props.get("inputs").and_then(|v| v.as_array())
                             {
                                 if !inputs.is_empty() && method != "get" && method != "delete" {
                                     let name = format!("Body{}", pascal_case(&node_name(op)));
@@ -207,8 +212,10 @@ impl GraphEmitter for OpenApiEmitter {
         let mut emitted_names: BTreeSet<String> = BTreeSet::new();
 
         // Build entity attribute index for DTO projection.
-        let entity_by_id: BTreeMap<String, &idl_graph::NodeDoc> =
-            graph.nodes_of_kind("entity").map(|n| (n.id.clone(), n)).collect();
+        let entity_by_id: BTreeMap<String, &idl_graph::NodeDoc> = graph
+            .nodes_of_kind("entity")
+            .map(|n| (n.id.clone(), n))
+            .collect();
 
         // 1. DTOs.
         for dto in &dtos {
@@ -222,7 +229,11 @@ impl GraphEmitter for OpenApiEmitter {
 
             match dto.kind {
                 DtoKind::Enum => {
-                    let _ = writeln!(s, "      type: {}", dto.value_type.as_deref().unwrap_or("string"));
+                    let _ = writeln!(
+                        s,
+                        "      type: {}",
+                        dto.value_type.as_deref().unwrap_or("string")
+                    );
                     if let Some(values) = &dto.values {
                         let _ = writeln!(s, "      enum:");
                         for value in values {
@@ -242,7 +253,8 @@ impl GraphEmitter for OpenApiEmitter {
                         if let Some(ref_name) = value_type.strip_prefix("dto:") {
                             let _ = writeln!(s, "        $ref: '#/components/schemas/{ref_name}'");
                         } else {
-                            let _ = writeln!(s, "        type: {}", map_type_to_openapi(value_type));
+                            let _ =
+                                writeln!(s, "        type: {}", map_type_to_openapi(value_type));
                         }
                     } else {
                         let _ = writeln!(s, "        type: string");
@@ -258,7 +270,11 @@ impl GraphEmitter for OpenApiEmitter {
                 DtoKind::ArrayAlias => {
                     let _ = writeln!(s, "      type: array");
                     let _ = writeln!(s, "      items:");
-                    write_type_or_ref_schema(&mut s, "        ", dto.items.as_deref().unwrap_or("string"));
+                    write_type_or_ref_schema(
+                        &mut s,
+                        "        ",
+                        dto.items.as_deref().unwrap_or("string"),
+                    );
                     if dto.nullable {
                         let _ = writeln!(s, "      nullable: true");
                     }
@@ -277,11 +293,27 @@ impl GraphEmitter for OpenApiEmitter {
                         if variant.array {
                             let _ = writeln!(s, "        - type: array");
                             let _ = writeln!(s, "          items:");
-                            write_type_or_ref_schema(&mut s, "            ", variant.ref_.as_deref().or(variant.ty.as_deref()).unwrap_or("string"));
+                            write_type_or_ref_schema(
+                                &mut s,
+                                "            ",
+                                variant
+                                    .ref_
+                                    .as_deref()
+                                    .or(variant.ty.as_deref())
+                                    .unwrap_or("string"),
+                            );
                         } else if let Some(ref_) = &variant.ref_ {
-                            let _ = writeln!(s, "        - $ref: '#/components/schemas/{}'", dto_name(ref_));
+                            let _ = writeln!(
+                                s,
+                                "        - $ref: '#/components/schemas/{}'",
+                                dto_name(ref_)
+                            );
                         } else {
-                            let _ = writeln!(s, "        - type: {}", map_type_to_openapi(variant.ty.as_deref().unwrap_or("string")));
+                            let _ = writeln!(
+                                s,
+                                "        - type: {}",
+                                map_type_to_openapi(variant.ty.as_deref().unwrap_or("string"))
+                            );
                         }
                     }
                     if let Some(discriminator) = &dto.discriminator {
@@ -291,8 +323,16 @@ impl GraphEmitter for OpenApiEmitter {
                             if !mapping.is_empty() {
                                 let _ = writeln!(s, "        mapping:");
                                 for (key, target) in mapping {
-                                    let mapped = target.strip_prefix("dto:").map(dto_name).unwrap_or_else(|| target.clone());
-                                    let _ = writeln!(s, "          {}: '#/components/schemas/{}'", yaml_str(key), mapped);
+                                    let mapped = target
+                                        .strip_prefix("dto:")
+                                        .map(dto_name)
+                                        .unwrap_or_else(|| target.clone());
+                                    let _ = writeln!(
+                                        s,
+                                        "          {}: '#/components/schemas/{}'",
+                                        yaml_str(key),
+                                        mapped
+                                    );
                                 }
                             }
                         }
@@ -307,14 +347,16 @@ impl GraphEmitter for OpenApiEmitter {
             }
 
             let _ = writeln!(s, "      type: object");
-            
+
             // Wave 14: wrapper DTOs.
             if dto.wrapper {
                 if let Some(wraps_ref) = &dto.wraps {
                     let wrapped_name = dto_name(wraps_ref);
                     // Property name is lowercase wrapped DTO name, optionally pluralized.
                     // SingleArticleResponse -> article, MultipleArticlesResponse -> articles.
-                    let is_array = name.starts_with("Multiple") || name.contains("Comments") || name == "TagsResponse";
+                    let is_array = name.starts_with("Multiple")
+                        || name.contains("Comments")
+                        || name == "TagsResponse";
                     let prop_name = if is_array {
                         format!("{}s", wrapped_name.to_lowercase())
                     } else {
@@ -327,17 +369,21 @@ impl GraphEmitter for OpenApiEmitter {
                     if is_array {
                         let _ = writeln!(s, "          type: array");
                         let _ = writeln!(s, "          items:");
-                        let _ = writeln!(s, "            $ref: '#/components/schemas/{wrapped_name}'");
+                        let _ =
+                            writeln!(s, "            $ref: '#/components/schemas/{wrapped_name}'");
                     } else {
-                        let _ = writeln!(s, "          $ref: '#/components/schemas/{wrapped_name}'");
+                        let _ =
+                            writeln!(s, "          $ref: '#/components/schemas/{wrapped_name}'");
                     }
                 }
                 entity_count += 1;
                 continue;
             }
-            
+
             // Standard DTO projection.
-            let base_attrs_arr: Vec<serde_json::Value> = dto.base.as_ref()
+            let base_attrs_arr: Vec<serde_json::Value> = dto
+                .base
+                .as_ref()
                 .and_then(|base| entity_by_id.get(base))
                 .and_then(|n| n.props.get("attributes"))
                 .and_then(|v| v.as_array())
@@ -381,7 +427,10 @@ impl GraphEmitter for OpenApiEmitter {
                         let _ = writeln!(s, "      properties:");
                         for attr in attrs {
                             let an = attr.get("name").and_then(|v| v.as_str()).unwrap_or("f");
-                            let at = attr.get("type").and_then(|v| v.as_str()).unwrap_or("string");
+                            let at = attr
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("string");
                             let nullable = attr
                                 .get("nullable")
                                 .and_then(|v| v.as_bool())
@@ -419,7 +468,10 @@ impl GraphEmitter for OpenApiEmitter {
         }
 
         report.nodes_emitted = entity_count + endpoint_count;
-        report.files.push(EmittedFile { path: PathBuf::from("openapi.yaml"), content: s });
+        report.files.push(EmittedFile {
+            path: PathBuf::from("openapi.yaml"),
+            content: s,
+        });
         Ok(report)
     }
 }
@@ -451,4 +503,3 @@ fn yaml_str(s: &str) -> String {
         s.to_string()
     }
 }
-

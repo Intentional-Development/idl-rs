@@ -38,7 +38,7 @@ impl IdlParser {
         // Parse metadata section
         while !self.is_at_end() {
             let keyword = self.peek_keyword();
-            
+
             match keyword.as_str() {
                 "idl_version" => {
                     self.consume_keyword("idl_version")?;
@@ -73,11 +73,13 @@ impl IdlParser {
                     metadata.source = Some(match val.as_str() {
                         "spec" => SourceType::Spec,
                         "code" => SourceType::Code,
-                        _ => return Err(IdlError::ParseError {
-                            line: self.line,
-                            column: self.column,
-                            message: format!("Invalid source type: {}", val),
-                        }),
+                        _ => {
+                            return Err(IdlError::ParseError {
+                                line: self.line,
+                                column: self.column,
+                                message: format!("Invalid source type: {}", val),
+                            })
+                        }
                     });
                     self.skip_whitespace_and_comments();
                 }
@@ -89,11 +91,13 @@ impl IdlParser {
                         "managed" => LifecycleType::Managed,
                         "exploratory" => LifecycleType::Exploratory,
                         "archived" => LifecycleType::Archived,
-                        _ => return Err(IdlError::ParseError {
-                            line: self.line,
-                            column: self.column,
-                            message: format!("Invalid lifecycle type: {}", val),
-                        }),
+                        _ => {
+                            return Err(IdlError::ParseError {
+                                line: self.line,
+                                column: self.column,
+                                message: format!("Invalid lifecycle type: {}", val),
+                            })
+                        }
                     });
                     self.skip_whitespace_and_comments();
                 }
@@ -107,11 +111,13 @@ impl IdlParser {
                         "fail" => DriftPolicy::Fail,
                         "warn" => DriftPolicy::Warn,
                         "ignore" => DriftPolicy::Ignore,
-                        _ => return Err(IdlError::ParseError {
-                            line: self.line,
-                            column: self.column,
-                            message: format!("Invalid drift policy: {}", val),
-                        }),
+                        _ => {
+                            return Err(IdlError::ParseError {
+                                line: self.line,
+                                column: self.column,
+                                message: format!("Invalid drift policy: {}", val),
+                            })
+                        }
                     });
                     self.skip_whitespace_and_comments();
                 }
@@ -125,11 +131,13 @@ impl IdlParser {
                         "strict" => TracePolicy::Strict,
                         "advisory" => TracePolicy::Advisory,
                         "none" => TracePolicy::None,
-                        _ => return Err(IdlError::ParseError {
-                            line: self.line,
-                            column: self.column,
-                            message: format!("Invalid trace policy: {}", val),
-                        }),
+                        _ => {
+                            return Err(IdlError::ParseError {
+                                line: self.line,
+                                column: self.column,
+                                message: format!("Invalid trace policy: {}", val),
+                            })
+                        }
                     });
                     self.skip_whitespace_and_comments();
                 }
@@ -167,7 +175,7 @@ impl IdlParser {
 
     fn parse_block(&mut self) -> Result<Block> {
         let block_type = self.peek_keyword();
-        
+
         match block_type.as_str() {
             "intent" => Ok(Block::Intent(self.parse_intent()?)),
             "scope" => Ok(Block::Scope(self.parse_scope()?)),
@@ -189,12 +197,13 @@ impl IdlParser {
         let name = self.parse_identifier()?;
         self.skip_whitespace();
         self.consume_char('{')?;
-        
+
         let fields = self.parse_key_value_block()?;
-        
+
         Ok(IntentBlock {
             name,
-            goal: fields.get("goal")
+            goal: fields
+                .get("goal")
                 .ok_or_else(|| IdlError::MissingRequiredField("goal".to_string()))?
                 .clone(),
             outcome: fields.get("outcome").cloned(),
@@ -215,9 +224,9 @@ impl IdlParser {
         let name = self.parse_identifier()?;
         self.skip_whitespace();
         self.consume_char('{')?;
-        
+
         let fields = self.parse_key_value_block()?;
-        
+
         Ok(ScopeBlock {
             name,
             includes: self.parse_array_field(&fields, "includes"),
@@ -231,9 +240,9 @@ impl IdlParser {
         let name = self.parse_identifier()?;
         self.skip_whitespace();
         self.consume_char('{')?;
-        
+
         let fields = self.parse_key_value_block()?;
-        
+
         Ok(EntityBlock {
             name,
             description: fields.get("description").cloned(),
@@ -250,9 +259,9 @@ impl IdlParser {
         let name = self.parse_identifier()?;
         self.skip_whitespace();
         self.consume_char('{')?;
-        
+
         let _fields = self.parse_key_value_block()?;
-        
+
         Ok(EventBlock {
             name,
             payload: HashMap::new(), // TODO: Parse payload block
@@ -266,15 +275,17 @@ impl IdlParser {
         let name = self.parse_identifier()?;
         self.skip_whitespace();
         self.consume_char('{')?;
-        
+
         let fields = self.parse_key_value_block()?;
-        
+
         Ok(RuleBlock {
             name,
-            when: fields.get("when")
+            when: fields
+                .get("when")
                 .ok_or_else(|| IdlError::MissingRequiredField("when".to_string()))?
                 .clone(),
-            then: fields.get("then")
+            then: fields
+                .get("then")
                 .ok_or_else(|| IdlError::MissingRequiredField("then".to_string()))?
                 .clone(),
             category: fields.get("category").and_then(|c| match c.as_str() {
@@ -292,13 +303,14 @@ impl IdlParser {
         let name = self.parse_string_literal()?;
         self.skip_whitespace();
         self.consume_char('{')?;
-        
+
         let fields = self.parse_key_value_block()?;
-        let expression = fields.get("expression")
+        let expression = fields
+            .get("expression")
             .or_else(|| fields.keys().next().map(|k| fields.get(k).unwrap()))
             .cloned()
             .unwrap_or_default();
-        
+
         Ok(InvariantBlock {
             name,
             expression,
@@ -312,13 +324,16 @@ impl IdlParser {
         let name = self.parse_identifier()?;
         self.skip_whitespace();
         self.consume_char('{')?;
-        
+
         let fields = self.parse_key_value_block()?;
-        
+
         Ok(ApiBlock {
             name,
             description: fields.get("description").cloned(),
-            base_path: fields.get("base_path").cloned().unwrap_or_else(|| "/".to_string()),
+            base_path: fields
+                .get("base_path")
+                .cloned()
+                .unwrap_or_else(|| "/".to_string()),
             endpoints: Vec::new(), // TODO: Parse endpoint blocks
         })
     }
@@ -333,13 +348,13 @@ impl IdlParser {
         };
         self.skip_whitespace();
         self.consume_char('{')?;
-        
+
         let fields_raw = self.parse_key_value_block()?;
         let mut fields = HashMap::new();
         for (k, v) in fields_raw {
             fields.insert(k, serde_json::Value::String(v));
         }
-        
+
         Ok(Block::Extension(ExtensionBlock {
             block_type,
             name,
@@ -350,13 +365,13 @@ impl IdlParser {
     fn parse_key_value_block(&mut self) -> Result<HashMap<String, String>> {
         let mut fields = HashMap::new();
         self.skip_whitespace_and_comments();
-        
+
         while self.current_char() != Some('}') {
             self.skip_whitespace_and_comments();
             if self.current_char() == Some('}') {
                 break;
             }
-            
+
             let key = self.parse_identifier()?;
             self.skip_whitespace();
             self.consume_char(':')?;
@@ -365,7 +380,7 @@ impl IdlParser {
             fields.insert(key, value);
             self.skip_whitespace_and_comments();
         }
-        
+
         self.consume_char('}')?;
         Ok(fields)
     }
@@ -373,7 +388,7 @@ impl IdlParser {
     fn parse_value(&mut self) -> Result<String> {
         self.skip_whitespace();
         let ch = self.current_char();
-        
+
         match ch {
             Some('"') => self.parse_string_literal(),
             Some('[') => self.parse_array_value(),
@@ -386,7 +401,7 @@ impl IdlParser {
         self.consume_char('[')?;
         let mut items = Vec::new();
         self.skip_whitespace_and_comments();
-        
+
         while self.current_char() != Some(']') {
             self.skip_whitespace_and_comments();
             if self.current_char() == Some(']') {
@@ -398,7 +413,7 @@ impl IdlParser {
                 self.advance();
             }
         }
-        
+
         self.consume_char(']')?;
         Ok(format!("[{}]", items.join(", ")))
     }
@@ -407,7 +422,7 @@ impl IdlParser {
         self.consume_char('{')?;
         let mut content = String::from("{");
         let mut depth = 1;
-        
+
         while depth > 0 && !self.is_at_end() {
             let ch = self.current_char().unwrap();
             content.push(ch);
@@ -418,15 +433,16 @@ impl IdlParser {
             }
             self.advance();
         }
-        
+
         Ok(content)
     }
 
     fn parse_array_field(&self, fields: &HashMap<String, String>, key: &str) -> Vec<String> {
-        fields.get(key)
+        fields
+            .get(key)
             .map(|v| {
                 if v.starts_with('[') && v.ends_with(']') {
-                    v[1..v.len()-1]
+                    v[1..v.len() - 1]
                         .split(',')
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
@@ -441,7 +457,7 @@ impl IdlParser {
     fn parse_string_literal(&mut self) -> Result<String> {
         self.consume_char('"')?;
         let mut value = String::new();
-        
+
         while let Some(ch) = self.current_char() {
             if ch == '"' {
                 self.advance();
@@ -465,7 +481,7 @@ impl IdlParser {
                 self.advance();
             }
         }
-        
+
         Err(IdlError::ParseError {
             line: self.line,
             column: self.column,
@@ -475,7 +491,7 @@ impl IdlParser {
 
     fn parse_identifier(&mut self) -> Result<String> {
         let mut ident = String::new();
-        
+
         while let Some(ch) = self.current_char() {
             if ch.is_alphanumeric() || ch == '_' || ch == '-' {
                 ident.push(ch);
@@ -484,7 +500,7 @@ impl IdlParser {
                 break;
             }
         }
-        
+
         if ident.is_empty() {
             return Err(IdlError::ParseError {
                 line: self.line,
@@ -492,13 +508,13 @@ impl IdlParser {
                 message: "Expected identifier".to_string(),
             });
         }
-        
+
         Ok(ident)
     }
 
     fn parse_dotted_identifier(&mut self) -> Result<String> {
         let mut ident = String::new();
-        
+
         while let Some(ch) = self.current_char() {
             if ch.is_alphanumeric() || ch == '_' || ch == '.' {
                 ident.push(ch);
@@ -507,7 +523,7 @@ impl IdlParser {
                 break;
             }
         }
-        
+
         if ident.is_empty() {
             return Err(IdlError::ParseError {
                 line: self.line,
@@ -515,14 +531,14 @@ impl IdlParser {
                 message: "Expected dotted identifier".to_string(),
             });
         }
-        
+
         Ok(ident)
     }
 
     fn peek_keyword(&self) -> String {
         let mut pos = self.position;
         let mut keyword = String::new();
-        
+
         while pos < self.input.len() {
             let ch = self.input.chars().nth(pos).unwrap();
             if ch.is_alphabetic() || ch == '_' || ch == '-' {
@@ -532,7 +548,7 @@ impl IdlParser {
                 break;
             }
         }
-        
+
         keyword
     }
 
@@ -554,7 +570,7 @@ impl IdlParser {
             column: self.column,
             message: format!("Expected '{}', got end of file", expected),
         })?;
-        
+
         if ch != expected {
             return Err(IdlError::ParseError {
                 line: self.line,
@@ -562,7 +578,7 @@ impl IdlParser {
                 message: format!("Expected '{}', got '{}'", expected, ch),
             });
         }
-        
+
         self.advance();
         Ok(())
     }

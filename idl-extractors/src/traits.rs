@@ -1,5 +1,5 @@
-use idl_core::IdlDocument;
 use anyhow::Result;
+use idl_core::IdlDocument;
 
 /// Extractor trait - analyzes brownfield code and generates IDL
 pub trait Extractor {

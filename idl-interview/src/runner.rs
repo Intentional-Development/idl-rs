@@ -97,10 +97,18 @@ pub async fn run_round_with_retries<P: LlmProvider + ?Sized>(
 }
 
 fn collect_decisions(session: &Session) -> Vec<&Value> {
-    session.rounds.iter().flat_map(|r| r.decisions.iter()).collect()
+    session
+        .rounds
+        .iter()
+        .flat_map(|r| r.decisions.iter())
+        .collect()
 }
 fn collect_questions(session: &Session) -> Vec<&Value> {
-    session.rounds.iter().flat_map(|r| r.questions.iter()).collect()
+    session
+        .rounds
+        .iter()
+        .flat_map(|r| r.questions.iter())
+        .collect()
 }
 
 /// Rewrite `interview://session-X/round-N` URIs that the skill prompts model
@@ -111,10 +119,10 @@ fn normalize_anchors(delta: &Value, session_id: &str, round: u32) -> Value {
         for n in nodes {
             if let Some(arr) = n.get_mut("source_anchors").and_then(Value::as_array_mut) {
                 for anchor in arr {
-                    let new_uri = anchor
-                        .get("uri")
-                        .and_then(Value::as_str)
-                        .and_then(|s| s.strip_prefix("interview://").map(|rest| format!("idl://interview/{rest}")));
+                    let new_uri = anchor.get("uri").and_then(Value::as_str).and_then(|s| {
+                        s.strip_prefix("interview://")
+                            .map(|rest| format!("idl://interview/{rest}"))
+                    });
                     if let Some(uri) = new_uri {
                         if let Some(obj) = anchor.as_object_mut() {
                             obj.insert("uri".into(), Value::String(uri));
@@ -135,11 +143,19 @@ fn normalize_anchors(delta: &Value, session_id: &str, round: u32) -> Value {
     delta
 }
 
-fn render_transcript(session_id: &str, round: u32, resp: &idl_llm::RoundResponse, attempt: u32) -> String {
+fn render_transcript(
+    session_id: &str,
+    round: u32,
+    resp: &idl_llm::RoundResponse,
+    attempt: u32,
+) -> String {
     let mut out = String::new();
     out.push_str(&format!("# Round {round} (session {session_id})\n\n"));
     out.push_str(&format!("- attempts: {}\n", attempt + 1));
-    out.push_str(&format!("- confidence_overall: {:.2}\n\n", resp.confidence_overall));
+    out.push_str(&format!(
+        "- confidence_overall: {:.2}\n\n",
+        resp.confidence_overall
+    ));
     if !resp.questions.is_empty() {
         out.push_str("## Open questions\n\n");
         for q in &resp.questions {

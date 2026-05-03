@@ -29,7 +29,9 @@ pub struct ReqwestClient {
 
 impl ReqwestClient {
     pub fn new() -> Self {
-        Self { inner: reqwest::Client::new() }
+        Self {
+            inner: reqwest::Client::new(),
+        }
     }
 }
 
@@ -74,7 +76,11 @@ impl OpenAiProvider {
     }
 
     pub fn new(api_key: String, http: Arc<dyn HttpClient>) -> Self {
-        Self { api_key, endpoint: DEFAULT_ENDPOINT.into(), http }
+        Self {
+            api_key,
+            endpoint: DEFAULT_ENDPOINT.into(),
+            http,
+        }
     }
 
     pub fn with_endpoint(mut self, endpoint: impl Into<String>) -> Self {
@@ -112,7 +118,10 @@ fn tool_to_openai_schema(t: &ToolDef) -> Value {
 impl LlmProvider for OpenAiProvider {
     async fn run_round(&self, request: RoundRequest) -> Result<RoundResponse> {
         let body = self.build_body(&request);
-        let raw = self.http.post_json(&self.endpoint, &self.api_key, body).await?;
+        let raw = self
+            .http
+            .post_json(&self.endpoint, &self.api_key, body)
+            .await?;
         extract_round_response(&raw)
     }
 }
@@ -126,9 +135,10 @@ fn extract_round_response(raw: &Value) -> Result<RoundResponse> {
     } else if let Some(arr) = raw.get("output").and_then(Value::as_array) {
         arr.iter()
             .find_map(|item| {
-                item.get("content")?.as_array()?.iter().find_map(|c| {
-                    c.get("text").and_then(Value::as_str).map(str::to_string)
-                })
+                item.get("content")?
+                    .as_array()?
+                    .iter()
+                    .find_map(|c| c.get("text").and_then(Value::as_str).map(str::to_string))
             })
             .ok_or_else(|| anyhow!("no text payload in OpenAI response"))?
     } else {

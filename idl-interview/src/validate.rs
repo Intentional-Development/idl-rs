@@ -12,8 +12,7 @@ use jsonschema::JSONSchema;
 use serde_json::Value;
 use std::str::FromStr;
 
-const EMBEDDED_SCHEMA: &str =
-    include_str!("../../../IDL/schemas/semantic-graph.schema.json");
+const EMBEDDED_SCHEMA: &str = include_str!("../../../IDL/schemas/semantic-graph.schema.json");
 
 #[derive(Debug, thiserror::Error)]
 #[error("invalid round delta: {0}")]
@@ -67,9 +66,8 @@ impl DeltaValidator {
                     .get("kind")
                     .and_then(Value::as_str)
                     .ok_or_else(|| ValidationError("edge missing `kind`".into()))?;
-                EdgeKind::from_str(kind).map_err(|_| {
-                    ValidationError(format!("non-kernel edge kind `{kind}`"))
-                })?;
+                EdgeKind::from_str(kind)
+                    .map_err(|_| ValidationError(format!("non-kernel edge kind `{kind}`")))?;
             }
         }
         // 2. Full schema pass.
@@ -93,15 +91,24 @@ pub fn delta_to_graph_doc(delta: &Value) -> Value {
     let mut out = serde_json::Map::new();
     out.insert(
         "version".into(),
-        delta.get("version").cloned().unwrap_or_else(|| Value::String("0.1.0".into())),
+        delta
+            .get("version")
+            .cloned()
+            .unwrap_or_else(|| Value::String("0.1.0".into())),
     );
     out.insert(
         "nodes".into(),
-        delta.get("nodes").cloned().unwrap_or_else(|| Value::Array(vec![])),
+        delta
+            .get("nodes")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(vec![])),
     );
     out.insert(
         "edges".into(),
-        delta.get("edges").cloned().unwrap_or_else(|| Value::Array(vec![])),
+        delta
+            .get("edges")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(vec![])),
     );
     Value::Object(out)
 }

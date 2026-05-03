@@ -27,16 +27,19 @@ fn test_azure_openai_discriminator_extraction() {
     // The extractor should recognize this as a union with discriminator
     // Even without oneOf, the discriminator.mapping provides the variant list
     let result = extract_discriminator(&schema);
-    
-    assert!(result.is_some(), "Should extract discriminator from Azure OpenAI pattern");
-    
+
+    assert!(
+        result.is_some(),
+        "Should extract discriminator from Azure OpenAI pattern"
+    );
+
     let disc = result.unwrap();
     assert_eq!(
         disc.get("property").and_then(Value::as_str),
         Some("role"),
         "Should extract propertyName as 'property'"
     );
-    
+
     let mapping = disc.get("mapping").and_then(Value::as_object).unwrap();
     assert_eq!(mapping.len(), 3, "Should have 3 mappings");
     assert_eq!(
@@ -69,7 +72,7 @@ fn test_discriminator_creates_union() {
         has_discriminator(&schema),
         "Should detect discriminator field"
     );
-    
+
     let mapping = extract_mapping(&schema);
     assert_eq!(mapping.len(), 2, "Should have 2 variants");
 }
@@ -98,17 +101,14 @@ fn test_flagship_chat_completion_request_message() {
     });
 
     let disc = extract_discriminator(&schema).expect("Should extract discriminator");
-    
+
     // Verify property name
-    assert_eq!(
-        disc.get("property").and_then(Value::as_str),
-        Some("role")
-    );
-    
+    assert_eq!(disc.get("property").and_then(Value::as_str), Some("role"));
+
     // Verify all 5 variants in mapping
     let mapping = disc.get("mapping").and_then(Value::as_object).unwrap();
     assert_eq!(mapping.len(), 5, "Should have 5 variants");
-    
+
     let expected_variants = vec!["system", "user", "assistant", "tool", "function"];
     for variant in expected_variants {
         assert!(
@@ -123,13 +123,12 @@ fn test_flagship_chat_completion_request_message() {
 
 fn extract_discriminator(schema: &Value) -> Option<Value> {
     use serde_json::Map;
-    use std::collections::HashMap;
-    
+
     let disc = schema.get("discriminator")?;
     let property = disc.get("propertyName")?.as_str()?;
     let mut result = Map::new();
     result.insert("property".into(), Value::String(property.into()));
-    
+
     if let Some(mapping) = disc.get("mapping").and_then(Value::as_object) {
         let mut m = Map::new();
         for (k, v) in mapping {
@@ -173,7 +172,7 @@ fn test_github_implicit_discriminator_detection() {
             { "$ref": "#/components/schemas/repository-rule-deletion" }
         ]
     });
-    
+
     // Variant schemas with implicit discriminator (single-value enum on 'type' property)
     let variant_schemas = vec![
         json!({
@@ -198,18 +197,27 @@ fn test_github_implicit_discriminator_detection() {
             "required": ["type"]
         }),
     ];
-    
+
     // Current behavior: oneOf detected, but no discriminator metadata
     assert!(parent_schema.get("oneOf").is_some(), "Should detect oneOf");
-    assert!(parent_schema.get("discriminator").is_none(), "Should have no explicit discriminator");
-    
+    assert!(
+        parent_schema.get("discriminator").is_none(),
+        "Should have no explicit discriminator"
+    );
+
     // Future v0.1.8 behavior: should infer discriminator from variants
     // (This test documents the expected behavior for Romanoff's implementation)
     let inferred = infer_discriminator_from_variants(&variant_schemas);
-    assert!(inferred.is_some(), "Should infer discriminator from variant patterns");
-    
+    assert!(
+        inferred.is_some(),
+        "Should infer discriminator from variant patterns"
+    );
+
     let disc = inferred.unwrap();
-    assert_eq!(disc.property, "type", "Should infer 'type' as discriminator property");
+    assert_eq!(
+        disc.property, "type",
+        "Should infer 'type' as discriminator property"
+    );
     assert_eq!(disc.mapping.len(), 3, "Should have 3 mappings");
     assert_eq!(disc.mapping.get("creation"), Some(&"variant-0".to_string()));
 }
@@ -241,25 +249,30 @@ fn test_propertyname_only_discriminator() {
     });
 
     let result = extract_discriminator(&schema);
-    assert!(result.is_some(), "Should extract propertyName-only discriminator");
-    
+    assert!(
+        result.is_some(),
+        "Should extract propertyName-only discriminator"
+    );
+
     let disc = result.unwrap();
     assert_eq!(
         disc.get("property").and_then(Value::as_str),
         Some("status"),
         "Should extract propertyName as 'property'"
     );
-    
+
     // v0.1.8: mapping is optional, so it should NOT be present when source has no mapping
     assert!(
         disc.get("mapping").is_none(),
         "Should NOT have mapping field when source has no mapping (propertyName-only pattern)"
     );
-    
+
     // mappingDerived should be false (default) when not synthesizing mapping
-    assert_eq!(
-        disc.get("mappingDerived").and_then(Value::as_bool).unwrap_or(false),
-        false,
+    assert!(
+        !disc
+            .get("mappingDerived")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         "mappingDerived should be false for propertyName-only"
     );
 }
@@ -272,30 +285,25 @@ struct InferredDiscriminator {
 
 fn infer_discriminator_from_variants(variants: &[Value]) -> Option<InferredDiscriminator> {
     use std::collections::{HashMap, HashSet};
-    
+
     if variants.is_empty() {
         return None;
     }
-    
+
     // Find properties that appear in all variants
     let first_props: HashSet<String> = variants[0]
         .get("properties")
         .and_then(Value::as_object)
         .map(|p| p.keys().cloned().collect())
         .unwrap_or_default();
-    
+
     for prop in first_props {
         let mut all_have_enum = true;
         let mut enum_values = Vec::new();
-        
+
         for (idx, variant) in variants.iter().enumerate() {
-            if let Some(prop_def) = variant
-                .pointer(&format!("/properties/{}", prop))
-            {
-                if let Some(enum_val) = prop_def
-                    .get("enum")
-                    .and_then(Value::as_array)
-                {
+            if let Some(prop_def) = variant.pointer(&format!("/properties/{}", prop)) {
+                if let Some(enum_val) = prop_def.get("enum").and_then(Value::as_array) {
                     if enum_val.len() == 1 {
                         if let Some(val) = enum_val[0].as_str() {
                             enum_values.push((val.to_string(), format!("variant-{}", idx)));
@@ -307,7 +315,7 @@ fn infer_discriminator_from_variants(variants: &[Value]) -> Option<InferredDiscr
             all_have_enum = false;
             break;
         }
-        
+
         if all_have_enum && enum_values.len() == variants.len() {
             // Check uniqueness
             let unique_vals: HashSet<_> = enum_values.iter().map(|(v, _)| v).collect();
@@ -320,7 +328,7 @@ fn infer_discriminator_from_variants(variants: &[Value]) -> Option<InferredDiscr
             }
         }
     }
-    
+
     None
 }
 
@@ -337,14 +345,14 @@ fn test_flagship_repository_rule() {
             { "$ref": "#/components/schemas/repository-rule-update" }
         ]
     });
-    
+
     // Should detect as union (oneOf present)
     assert!(schema.get("oneOf").is_some());
-    
+
     // Should extract variant references
     let variants = schema.get("oneOf").and_then(Value::as_array).unwrap();
     assert_eq!(variants.len(), 2);
-    
+
     // But no discriminator metadata (expected limitation)
     assert!(schema.get("discriminator").is_none());
 }

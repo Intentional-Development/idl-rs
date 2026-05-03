@@ -26,7 +26,7 @@ pub enum When {
     /// Legacy string-form when expression.
     /// Example: "prev_node.status == 'success'"
     String(String),
-    
+
     /// Structured when expression (v0.1.4+).
     Structured(WhenStructured),
 }
@@ -37,16 +37,16 @@ pub struct WhenStructured {
     /// Canonical expression string (source-of-truth).
     /// Example: "$json.destination === 'London'"
     pub expr: String,
-    
+
     /// Optional structured AST representation.
     /// Shape depends on the expression language (CEL, jsonlogic, n8n, etc.).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ast: Option<Value>,
-    
+
     /// Optional list of variables/dependencies read by the expression.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vars: Vec<WhenVar>,
-    
+
     /// Optional expression language identifier.
     /// Examples: "n8n", "cel", "jsonlogic", "jq"
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,7 +59,7 @@ pub struct WhenVar {
     /// Variable name as it appears in the expression.
     /// Example: "$json.destination"
     pub name: String,
-    
+
     /// Optional source node or context for this variable.
     /// Example: "node:fetch-packages", "prev_node", "workflow_data"
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -74,12 +74,12 @@ impl When {
             When::Structured(w) => &w.expr,
         }
     }
-    
+
     /// Check if this is the structured form.
     pub fn is_structured(&self) -> bool {
         matches!(self, When::Structured(_))
     }
-    
+
     /// Get the structured form if present, None for string form.
     pub fn structured(&self) -> Option<&WhenStructured> {
         match self {
@@ -99,13 +99,13 @@ impl WhenStructured {
             lang: None,
         }
     }
-    
+
     /// Builder method to add AST.
     pub fn with_ast(mut self, ast: Value) -> Self {
         self.ast = Some(ast);
         self
     }
-    
+
     /// Builder method to add a variable.
     pub fn with_var(mut self, name: impl Into<String>, source: Option<String>) -> Self {
         self.vars.push(WhenVar {
@@ -114,7 +114,7 @@ impl WhenStructured {
         });
         self
     }
-    
+
     /// Builder method to set the language.
     pub fn with_lang(mut self, lang: impl Into<String>) -> Self {
         self.lang = Some(lang.into());
@@ -130,7 +130,7 @@ impl WhenVar {
             source: None,
         }
     }
-    
+
     /// Create a variable reference with a source.
     pub fn with_source(name: impl Into<String>, source: impl Into<String>) -> Self {
         Self {
@@ -198,7 +198,7 @@ mod tests {
         let when = WhenStructured::new("$json.x > 5")
             .with_var("$json.x", Some("node:src".into()))
             .with_lang("n8n");
-        
+
         assert_eq!(when.expr, "$json.x > 5");
         assert_eq!(when.vars.len(), 1);
         assert_eq!(when.lang.as_deref(), Some("n8n"));

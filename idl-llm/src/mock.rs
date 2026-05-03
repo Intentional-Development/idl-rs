@@ -23,7 +23,10 @@ pub struct MockProvider {
 
 impl MockProvider {
     pub fn from_responses(responses: Vec<RoundResponse>) -> Self {
-        Self { by_round: responses, invalid_attempts: Mutex::new(0) }
+        Self {
+            by_round: responses,
+            invalid_attempts: Mutex::new(0),
+        }
     }
 
     pub fn from_dir(dir: &Path, rounds: u32) -> Result<Self> {

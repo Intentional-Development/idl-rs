@@ -7,8 +7,8 @@ use anyhow::{bail, Context, Result};
 use serde_json::json;
 
 use idl_proposals::{
-    audit_log, find_proposal, generate_proposal_id, list_proposals, locate_changes_dir,
-    accept_proposal_safe, DiffOp, Proposal, ProposalStatus,
+    accept_proposal_safe, audit_log, find_proposal, generate_proposal_id, list_proposals,
+    locate_changes_dir, DiffOp, Proposal, ProposalStatus,
 };
 
 /// Create a new proposal from diff ops JSON file.
@@ -82,12 +82,18 @@ pub fn create(title: String, target_graph: PathBuf, ops_file: PathBuf) -> Result
 
 /// List proposals, optionally filtered by status.
 pub fn list(status_filter: Option<String>) -> Result<ExitCode> {
-    let filter = status_filter.as_ref().map(|s| match s.as_str() {
-        "pending" => Ok(ProposalStatus::Pending),
-        "accepted" => Ok(ProposalStatus::Accepted),
-        "rejected" => Ok(ProposalStatus::Rejected),
-        _ => bail!("invalid status '{}' (must be pending, accepted, or rejected)", s),
-    }).transpose()?;
+    let filter = status_filter
+        .as_ref()
+        .map(|s| match s.as_str() {
+            "pending" => Ok(ProposalStatus::Pending),
+            "accepted" => Ok(ProposalStatus::Accepted),
+            "rejected" => Ok(ProposalStatus::Rejected),
+            _ => bail!(
+                "invalid status '{}' (must be pending, accepted, or rejected)",
+                s
+            ),
+        })
+        .transpose()?;
 
     let proposals = list_proposals(filter)?;
 
@@ -116,7 +122,10 @@ pub fn list(status_filter: Option<String>) -> Result<ExitCode> {
         };
 
         let target_short = if proposal.target_graph.len() > 25 {
-            format!("...{}", &proposal.target_graph[proposal.target_graph.len() - 22..])
+            format!(
+                "...{}",
+                &proposal.target_graph[proposal.target_graph.len() - 22..]
+            )
         } else {
             proposal.target_graph.clone()
         };

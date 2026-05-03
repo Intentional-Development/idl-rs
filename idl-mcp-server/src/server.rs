@@ -1,20 +1,19 @@
 //! IDL MCP Server handler — tools, resources, and protocol implementation.
 
 use rmcp::{
-    ErrorData as McpError, RoleServer, ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::*,
     schemars,
     service::RequestContext,
-    tool, tool_handler, tool_router,
+    tool, tool_handler, tool_router, ErrorData as McpError, RoleServer, ServerHandler,
 };
 use serde_json::json;
 
 use idl_graph::doc::GraphDoc;
 use idl_graph::extensions_dto::{parse_dtos, DtoDefinition};
 use idl_proposals::{
-    Proposal, ProposalStatus, DiffOp, audit_log, list_proposals,
-    find_proposal, accept_proposal_safe, generate_proposal_id, locate_changes_dir,
+    accept_proposal_safe, audit_log, find_proposal, generate_proposal_id, list_proposals,
+    locate_changes_dir, DiffOp, Proposal, ProposalStatus,
 };
 
 // ---------- Tool input schemas (all pub for tests) ----------
@@ -99,7 +98,14 @@ pub struct ProposalRejectParams {
 
 #[derive(Clone)]
 pub struct IdlServer {
+    #[allow(dead_code)]
     tool_router: ToolRouter<IdlServer>,
+}
+
+impl Default for IdlServer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[tool_router]
@@ -111,7 +117,10 @@ impl IdlServer {
     }
 
     /// Read and return the full IDL graph as JSON.
-    #[tool(name = "idl.graph.read", description = "Parse an IDL graph file and return the full graph as JSON")]
+    #[tool(
+        name = "idl.graph.read",
+        description = "Parse an IDL graph file and return the full graph as JSON"
+    )]
     fn graph_read(
         &self,
         Parameters(params): Parameters<GraphReadParams>,
@@ -123,7 +132,10 @@ impl IdlServer {
     }
 
     /// List all DTO names and their kinds from the graph.
-    #[tool(name = "idl.graph.list_dtos", description = "List DTO names and kinds from an IDL graph file")]
+    #[tool(
+        name = "idl.graph.list_dtos",
+        description = "List DTO names and kinds from an IDL graph file"
+    )]
     fn list_dtos(
         &self,
         Parameters(params): Parameters<ListDtosParams>,
@@ -145,7 +157,10 @@ impl IdlServer {
     }
 
     /// Get a single DTO by name.
-    #[tool(name = "idl.dto.get", description = "Return a single DTO definition by name from an IDL graph file")]
+    #[tool(
+        name = "idl.dto.get",
+        description = "Return a single DTO definition by name from an IDL graph file"
+    )]
     fn dto_get(
         &self,
         Parameters(params): Parameters<DtoGetParams>,
@@ -161,7 +176,10 @@ impl IdlServer {
     }
 
     /// List endpoints (operation nodes) from the graph.
-    #[tool(name = "idl.graph.list_endpoints", description = "List endpoint/operation nodes from an IDL graph file")]
+    #[tool(
+        name = "idl.graph.list_endpoints",
+        description = "List endpoint/operation nodes from an IDL graph file"
+    )]
     fn list_endpoints(
         &self,
         Parameters(params): Parameters<ListEndpointsParams>,
@@ -186,7 +204,10 @@ impl IdlServer {
     }
 
     /// Return the schema version from the graph metadata.
-    #[tool(name = "idl.schema.version", description = "Return the schema version from an IDL graph file")]
+    #[tool(
+        name = "idl.schema.version",
+        description = "Return the schema version from an IDL graph file"
+    )]
     fn schema_version(
         &self,
         Parameters(params): Parameters<SchemaVersionParams>,
@@ -196,7 +217,10 @@ impl IdlServer {
     }
 
     /// Create a new proposal (MCP mutation tool).
-    #[tool(name = "idl.proposal.create", description = "Create a new proposal for graph changes")]
+    #[tool(
+        name = "idl.proposal.create",
+        description = "Create a new proposal for graph changes"
+    )]
     fn proposal_create(
         &self,
         Parameters(params): Parameters<ProposalCreateParams>,
@@ -205,9 +229,10 @@ impl IdlServer {
         let diff_ops: Vec<DiffOp> = params
             .diff_ops
             .into_iter()
-            .map(|v| serde_json::from_value(v).map_err(|e| {
-                McpError::invalid_params(format!("invalid diff_op: {}", e), None)
-            }))
+            .map(|v| {
+                serde_json::from_value(v)
+                    .map_err(|e| McpError::invalid_params(format!("invalid diff_op: {}", e), None))
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         // Generate proposal ID
@@ -252,20 +277,27 @@ impl IdlServer {
     }
 
     /// List proposals (optionally filtered by status).
-    #[tool(name = "idl.proposal.list", description = "List proposals, optionally filtered by status")]
+    #[tool(
+        name = "idl.proposal.list",
+        description = "List proposals, optionally filtered by status"
+    )]
     fn proposal_list(
         &self,
         Parameters(params): Parameters<ProposalListParams>,
     ) -> Result<CallToolResult, McpError> {
-        let status_filter = params.status.as_deref().map(|s| match s {
-            "pending" => Ok(ProposalStatus::Pending),
-            "accepted" => Ok(ProposalStatus::Accepted),
-            "rejected" => Ok(ProposalStatus::Rejected),
-            _ => Err(McpError::invalid_params(
-                format!("invalid status filter: {}", s),
-                None,
-            )),
-        }).transpose()?;
+        let status_filter = params
+            .status
+            .as_deref()
+            .map(|s| match s {
+                "pending" => Ok(ProposalStatus::Pending),
+                "accepted" => Ok(ProposalStatus::Accepted),
+                "rejected" => Ok(ProposalStatus::Rejected),
+                _ => Err(McpError::invalid_params(
+                    format!("invalid status filter: {}", s),
+                    None,
+                )),
+            })
+            .transpose()?;
 
         let proposals = list_proposals(status_filter)
             .map_err(|e| McpError::internal_error(format!("list proposals: {}", e), None))?;
@@ -292,7 +324,10 @@ impl IdlServer {
     }
 
     /// Get a single proposal by ID.
-    #[tool(name = "idl.proposal.get", description = "Get a proposal by ID (full or prefix)")]
+    #[tool(
+        name = "idl.proposal.get",
+        description = "Get a proposal by ID (full or prefix)"
+    )]
     fn proposal_get(
         &self,
         Parameters(params): Parameters<ProposalGetParams>,
@@ -321,7 +356,10 @@ impl IdlServer {
     }
 
     /// Accept a proposal (applies changes to target graph).
-    #[tool(name = "idl.proposal.accept", description = "Accept a proposal and apply changes to the target graph")]
+    #[tool(
+        name = "idl.proposal.accept",
+        description = "Accept a proposal and apply changes to the target graph"
+    )]
     fn proposal_accept(
         &self,
         Parameters(params): Parameters<ProposalAcceptParams>,
@@ -343,7 +381,10 @@ impl IdlServer {
     }
 
     /// Reject a proposal (does not modify the target graph).
-    #[tool(name = "idl.proposal.reject", description = "Reject a proposal with a reason")]
+    #[tool(
+        name = "idl.proposal.reject",
+        description = "Reject a proposal with a reason"
+    )]
     fn proposal_reject(
         &self,
         Parameters(params): Parameters<ProposalRejectParams>,
@@ -398,7 +439,10 @@ impl ServerHandler for IdlServer {
                 .enable_tools()
                 .build(),
         )
-        .with_server_info(Implementation::new("idl-mcp-server", env!("CARGO_PKG_VERSION")))
+        .with_server_info(Implementation::new(
+            "idl-mcp-server",
+            env!("CARGO_PKG_VERSION"),
+        ))
         .with_protocol_version(ProtocolVersion::V_2024_11_05)
         .with_instructions(
             "IDL MCP Server. Provides read tools to query IDL semantic graphs and mutation tools \
@@ -602,7 +646,9 @@ mod tests {
     fn test_graph_read() {
         let path = write_sample_graph();
         let server = IdlServer::new();
-        let result = server.graph_read(Parameters(GraphReadParams { path })).unwrap();
+        let result = server
+            .graph_read(Parameters(GraphReadParams { path }))
+            .unwrap();
         assert!(!result.is_error.unwrap_or(false));
     }
 
@@ -610,7 +656,9 @@ mod tests {
     fn test_list_endpoints() {
         let path = write_sample_graph();
         let server = IdlServer::new();
-        let result = server.list_endpoints(Parameters(ListEndpointsParams { path })).unwrap();
+        let result = server
+            .list_endpoints(Parameters(ListEndpointsParams { path }))
+            .unwrap();
         let text = extract_text(&result);
         assert!(text.contains("op-get-users"));
     }
@@ -619,7 +667,9 @@ mod tests {
     fn test_schema_version() {
         let path = write_sample_graph();
         let server = IdlServer::new();
-        let result = server.schema_version(Parameters(SchemaVersionParams { path })).unwrap();
+        let result = server
+            .schema_version(Parameters(SchemaVersionParams { path }))
+            .unwrap();
         let text = extract_text(&result);
         assert_eq!(text, "0.1.0");
     }
@@ -628,7 +678,9 @@ mod tests {
     fn test_list_dtos() {
         let path = write_sample_graph();
         let server = IdlServer::new();
-        let result = server.list_dtos(Parameters(ListDtosParams { path })).unwrap();
+        let result = server
+            .list_dtos(Parameters(ListDtosParams { path }))
+            .unwrap();
         let text = extract_text(&result);
         assert!(text.contains("UserResponse"));
     }
@@ -637,10 +689,12 @@ mod tests {
     fn test_dto_get() {
         let path = write_sample_graph();
         let server = IdlServer::new();
-        let result = server.dto_get(Parameters(DtoGetParams {
-            path,
-            name: "UserResponse".to_string(),
-        })).unwrap();
+        let result = server
+            .dto_get(Parameters(DtoGetParams {
+                path,
+                name: "UserResponse".to_string(),
+            }))
+            .unwrap();
         let text = extract_text(&result);
         assert!(text.contains("UserResponse"));
     }

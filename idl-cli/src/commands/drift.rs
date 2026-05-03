@@ -37,7 +37,7 @@ use std::process::ExitCode;
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
 use idl_emitters::{EmitReport, GraphEmitter, PythonEmitter, RustEmitter, TypeScriptEmitter};
-use idl_graph::{diff_against_sources, diff_graphs, GraphDoc};
+use idl_graph::{diff_against_sources, diff_graphs, diff_graphs_contract_aware, GraphDoc};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy)]
@@ -47,17 +47,26 @@ pub enum OutputFormat {
     Markdown,
 }
 
-pub fn run_graph(baseline: PathBuf, current: PathBuf, format: OutputFormat) -> Result<ExitCode> {
+pub fn run_graph(baseline: PathBuf, current: PathBuf, format: OutputFormat, contract_aware: bool) -> Result<ExitCode> {
     let base = GraphDoc::load(&baseline)
         .with_context(|| format!("load baseline graph {}", baseline.display()))?;
     let cur = GraphDoc::load(&current)
         .with_context(|| format!("load current graph {}", current.display()))?;
-    let report = diff_graphs(
-        baseline.display().to_string(),
-        &base,
-        current.display().to_string(),
-        &cur,
-    );
+    let report = if contract_aware {
+        diff_graphs_contract_aware(
+            baseline.display().to_string(),
+            &base,
+            current.display().to_string(),
+            &cur,
+        )
+    } else {
+        diff_graphs(
+            baseline.display().to_string(),
+            &base,
+            current.display().to_string(),
+            &cur,
+        )
+    };
     match format {
         OutputFormat::Human => println!("{}", report.to_human()),
         OutputFormat::Json => println!("{}", report.to_json()),

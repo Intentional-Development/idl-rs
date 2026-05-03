@@ -6,6 +6,7 @@ use crate::prompts::round_prompt;
 use crate::session::{Round, Session, SessionStatus};
 use crate::validate::{delta_to_graph_doc, DeltaValidator};
 use anyhow::{anyhow, Result};
+use idl_audit::{Actor, AuditEvent, AuditWriter};
 use idl_llm::tools::default_tools;
 use idl_llm::{LlmProvider, RoundRequest};
 use serde_json::Value;
@@ -62,13 +63,17 @@ pub async fn run_round_with_retries<P: LlmProvider + ?Sized>(
                 let round = Round {
                     n: round_number,
                     transcript_md: render_transcript(&session.id, round_number, &resp, attempt),
-                    graph_delta_json: doc,
+                    graph_delta_json: doc.clone(),
                     questions: resp.questions,
                     decisions: resp.decisions,
                     confidence_overall: resp.confidence_overall,
                 };
                 let confidence = round.confidence_overall;
                 session.write_round(round)?;
+                
+                // Log AI run to audit trail
+                log_interview_round(&session.id, round_number, &session.model, attempt + 1, &doc)?;
+                
                 if round_number >= session.rounds_planned {
                     session.status = SessionStatus::Completed;
                     session.save()?;
@@ -178,4 +183,35 @@ fn render_transcript(
     out.push_str(&serde_json::to_string_pretty(&resp.graph_delta).unwrap_or_default());
     out.push_str("\n```\n");
     out
+}
+
+/// Log interview round to AI audit trail.
+fn log_interview_round(
+    session_id: &str,
+    round: u32,
+    model: &str,
+    attempts: u32,
+    graph_delta: &Value,
+) -> Result<()> {
+    let writer = AuditWriter::new(None)?;
+    let node_count = graph_delta
+        .get("nodes")
+        .and_then(Value::as_array)
+        .map(|n| n.len())
+        .unwrap_or(0);
+    let event = AuditEvent::builder()
+        .actor(Actor::Agent)
+        .agent("interview")
+        .model(model)
+        .tool("interview.round")
+        .target(format!("session:{}:round:{}", session_id, round))
+        .args(serde_json::json!({
+            "round": round,
+            "attempts": attempts,
+            "nodes_generated": node_count
+        }))
+        .outcome_success()
+        .build()?;
+    writer.log(&event)?;
+    Ok(())
 }

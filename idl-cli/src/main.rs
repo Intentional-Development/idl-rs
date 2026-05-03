@@ -402,6 +402,9 @@ enum DriftAction {
         json: bool,
         #[arg(long)]
         markdown: bool,
+        /// Enable contract-type-aware drift severity classification.
+        #[arg(long)]
+        by_contract_type: bool,
     },
     /// Re-anchor a graph against a source code root.
     Code {
@@ -641,6 +644,7 @@ fn dispatch(cmd: Commands, ctx: &output::OutputContext) -> Result<ExitCode> {
                     current,
                     json,
                     markdown,
+                    by_contract_type,
                 }) => {
                     let fmt = if json {
                         drift::OutputFormat::Json
@@ -649,7 +653,7 @@ fn dispatch(cmd: Commands, ctx: &output::OutputContext) -> Result<ExitCode> {
                     } else {
                         drift::OutputFormat::Human
                     };
-                    drift::run_graph(baseline, current, fmt)
+                    drift::run_graph(baseline, current, fmt, by_contract_type)
                 }
                 Some(DriftAction::Code {
                     graph,

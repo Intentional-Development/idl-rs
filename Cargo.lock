@@ -962,6 +962,7 @@ version = "0.9.9-rc.5"
 dependencies = [
  "anyhow",
  "async-trait",
+ "idl-audit",
  "idl-graph",
  "idl-llm",
  "jsonschema",

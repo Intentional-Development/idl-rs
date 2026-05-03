@@ -9,6 +9,7 @@ repository.workspace = true
 description = "Multi-round greenfield interview runtime that produces proposed kernel graph deltas."
 
 [dependencies]
+idl-audit = { path = "../idl-audit" }
 idl-graph = { path = "../idl-graph" }
 idl-llm = { path = "../idl-llm" }
 serde = { workspace = true }

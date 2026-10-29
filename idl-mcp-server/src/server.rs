@@ -12,9 +12,14 @@ use serde_json::json;
 use idl_graph::doc::GraphDoc;
 use idl_graph::extensions_dto::{parse_dtos, DtoDefinition};
 use idl_proposals::{
-    accept_proposal_safe, audit_log, find_proposal, generate_proposal_id, list_proposals,
-    locate_changes_dir, DiffOp, Proposal, ProposalStatus,
+    audit_log, find_proposal, generate_proposal_id, list_proposals, locate_changes_dir, DiffOp,
+    Proposal, ProposalStatus,
 };
+
+/// Tool names that must never be exposed over MCP. Review decisions are human-only:
+/// a stdio MCP caller cannot be authenticated, so it cannot sign an approval
+/// (Agentic Execution Profile, P1). Humans decide via `idl propose accept|reject`.
+pub const HUMAN_ONLY_DECISION_TOOLS: [&str; 2] = ["idl.proposal.accept", "idl.proposal.reject"];
 
 // ---------- Tool input schemas (all pub for tests) ----------
 
@@ -74,24 +79,6 @@ pub struct ProposalListParams {
 pub struct ProposalGetParams {
     /// Proposal ID (full or prefix)
     pub id: String,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct ProposalAcceptParams {
-    /// Proposal ID (full or prefix)
-    pub id: String,
-    /// Actor identity (e.g., agent name, user email)
-    pub actor: String,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct ProposalRejectParams {
-    /// Proposal ID (full or prefix)
-    pub id: String,
-    /// Rejection reason
-    pub reason: String,
-    /// Actor identity (e.g., agent name, user email)
-    pub actor: String,
 }
 
 // ---------- Server ----------
@@ -358,92 +345,6 @@ impl IdlServer {
                 .map_err(|e| McpError::internal_error(format!("serialize: {}", e), None))?,
         )]))
     }
-
-    /// Accept a proposal (applies changes to target graph).
-    #[tool(
-        name = "idl.proposal.accept",
-        description = "Accept a proposal and apply changes to the target graph"
-    )]
-    fn proposal_accept(
-        &self,
-        Parameters(params): Parameters<ProposalAcceptParams>,
-    ) -> Result<CallToolResult, McpError> {
-        let hash = accept_proposal_safe(&params.id, &params.actor, Some("mcp"))
-            .map_err(|e| McpError::internal_error(format!("accept proposal: {}", e), None))?;
-
-        let result = json!({
-            "id": params.id,
-            "status": "accepted",
-            "actor": params.actor,
-            "graph_hash": hash,
-        });
-
-        Ok(CallToolResult::success(vec![Content::text(
-            serde_json::to_string_pretty(&result)
-                .map_err(|e| McpError::internal_error(format!("serialize: {}", e), None))?,
-        )]))
-    }
-
-    /// Reject a proposal (does not modify the target graph).
-    #[tool(
-        name = "idl.proposal.reject",
-        description = "Reject a proposal with a reason"
-    )]
-    fn proposal_reject(
-        &self,
-        Parameters(params): Parameters<ProposalRejectParams>,
-    ) -> Result<CallToolResult, McpError> {
-        let (proposal_path, mut proposal) = find_proposal(&params.id)
-            .map_err(|e| McpError::invalid_params(format!("{}", e), None))?;
-
-        if proposal.status != ProposalStatus::Pending {
-            return Err(McpError::invalid_params(
-                format!(
-                    "proposal {} is not pending (status: {:?})",
-                    proposal.id, proposal.status
-                ),
-                None,
-            ));
-        }
-
-        proposal.reject(params.reason.clone());
-        proposal
-            .save(&proposal_path)
-            .map_err(|e| McpError::internal_error(format!("save proposal: {}", e), None))?;
-
-        // AI audit log
-        idl_proposals::ai_audit_log(
-            "reject",
-            &proposal.id,
-            &params.actor,
-            Some("mcp"),
-            None,
-            Some(json!({"reason": params.reason.clone()})),
-        )
-        .map_err(|e| McpError::internal_error(format!("ai audit log: {}", e), None))?;
-
-        // Legacy audit log
-        audit_log(
-            "reject",
-            &proposal.id,
-            &params.actor,
-            Some("mcp"),
-            Some(json!({"reason": params.reason})),
-        )
-        .map_err(|e| McpError::internal_error(format!("audit log: {}", e), None))?;
-
-        let result = json!({
-            "id": proposal.id,
-            "status": "rejected",
-            "actor": params.actor,
-            "reason": params.reason,
-        });
-
-        Ok(CallToolResult::success(vec![Content::text(
-            serde_json::to_string_pretty(&result)
-                .map_err(|e| McpError::internal_error(format!("serialize: {}", e), None))?,
-        )]))
-    }
 }
 
 #[tool_handler]
@@ -461,10 +362,12 @@ impl ServerHandler for IdlServer {
         ))
         .with_protocol_version(ProtocolVersion::V_2024_11_05)
         .with_instructions(
-            "IDL MCP Server. Provides read tools to query IDL semantic graphs and mutation tools \
-             to manage proposals. Read tools: idl.graph.read, idl.graph.list_dtos, idl.dto.get, \
-             idl.graph.list_endpoints, idl.schema.version. Proposal tools: idl.proposal.create, \
-             idl.proposal.list, idl.proposal.get, idl.proposal.accept, idl.proposal.reject. \
+            "IDL MCP Server. Provides read tools to query IDL semantic graphs and tools for \
+             agents to submit and inspect proposals. Read tools: idl.graph.read, \
+             idl.graph.list_dtos, idl.dto.get, idl.graph.list_endpoints, idl.schema.version. \
+             Proposal tools: idl.proposal.create, idl.proposal.list, idl.proposal.get. \
+             Proposals stay pending until a human reviews them outside MCP with \
+             `idl propose accept|reject`; review decisions are never available as tools. \
              Resources: idl://{path} for graph files, idl://schema for the JSON Schema."
                 .to_string(),
         )
@@ -653,9 +556,44 @@ mod tests {
         assert!(names.contains(&"idl.proposal.create"));
         assert!(names.contains(&"idl.proposal.list"));
         assert!(names.contains(&"idl.proposal.get"));
-        assert!(names.contains(&"idl.proposal.accept"));
-        assert!(names.contains(&"idl.proposal.reject"));
-        assert_eq!(names.len(), 10);
+        assert_eq!(names.len(), 8);
+    }
+
+    #[test]
+    fn test_review_decisions_are_not_mcp_tools() {
+        let router = IdlServer::tool_router();
+        for name in HUMAN_ONLY_DECISION_TOOLS {
+            assert!(
+                !router.has_route(name),
+                "{name} must not be routable over MCP"
+            );
+        }
+        let names: Vec<String> = router
+            .list_all()
+            .iter()
+            .map(|t| t.name.to_string())
+            .collect();
+        for name in &names {
+            for verb in ["accept", "reject", "approve", "merge"] {
+                assert!(
+                    !name.contains(verb),
+                    "tool {name} looks like a review decision; decisions are human-only"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_instructions_do_not_advertise_review_decisions() {
+        let info = IdlServer::new().get_info();
+        let instructions = info.instructions.unwrap_or_default();
+        for name in HUMAN_ONLY_DECISION_TOOLS {
+            assert!(
+                !instructions.contains(name),
+                "instructions advertise {name}"
+            );
+        }
+        assert!(instructions.contains("idl propose accept|reject"));
     }
 
     #[test]

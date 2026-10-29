@@ -1,4 +1,5 @@
-//! Integration tests for MCP proposal tools.
+//! Integration tests for the proposal library behind the MCP proposal tools (create, list,
+//! get) and the human CLI review path (accept, reject). Accept and reject are not MCP tools.
 
 use serde_json::json;
 use std::path::PathBuf;

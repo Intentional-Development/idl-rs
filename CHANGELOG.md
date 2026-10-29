@@ -1,3 +1,12 @@
+## [Unreleased]
+
+### Removed
+- **idl-mcp-server: `idl.proposal.accept` and `idl.proposal.reject` are no longer MCP tools.** A stdio MCP caller cannot be authenticated, and its `actor` field was free text, so any connected agent could approve its own proposal. Review decisions are now human-only, via `idl propose accept|reject` in the CLI (Agentic Execution Profile, principle P1). Agents can still create, list and get proposals. The server's instructions no longer advertise the decision tools, and new tests assert that they are neither listed nor routable.
+  - Migration: clients that called these tools (for example the workbench-mac review UI) must route the decision to a human surface. The workbench-mac call already failed, because it sent no `actor`.
+
+### Fixed
+- `idl-mcp-server` crate description no longer claims the server is read-only; `idl.proposal.create` writes proposal files.
+
 ## [v0.9.9-rc.1] - 2026-05-02
 
 - Wave 22 release: Nested schema traversal refinement, behavior classification (6-role taxonomy), MCP proposal mutations, perspectives (9 roles), derived prompts
